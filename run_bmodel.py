@@ -4,7 +4,6 @@ import glob
 import math
 import json
 from time import time
-from threading import Thread, Event, RLock
 from pathlib import Path
 from PIL import Image
 from PIL.Image import Image as PILImage
@@ -16,13 +15,11 @@ import numpy as np
 from numpy import ndarray
 from tqdm import tqdm
 
-BASE_PATH = Path(__file__).parent
-MODEL_FILE = BASE_PATH / 'r-esrgan4x.bmodel'
-LIB_PATH = BASE_PATH / 'TPU-Coder-Cup' / 'CCF2023'
-IN_PATH = BASE_PATH / 'test'
-OUT_PATH = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
-IMAGE_PATH = OUT_PATH / 'test_sr'
-REPORT_FILE = OUT_PATH / 'test.json'
+BASE_PATH  = Path(__file__).parent
+MODEL_PATH = BASE_PATH / 'models'
+LIB_PATH   = BASE_PATH / 'TPU-Coder-Cup' / 'CCF2023'
+IN_PATH    = BASE_PATH / 'test'
+OUT_PATH   = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
 
 # TPU engine sdk
 import sophon.sail as sail
@@ -159,52 +156,6 @@ class UpscaleModel:
     return im if ret_type == 'np' else Image.fromarray(im)
 
 
-def worker(thr_id:int, args, paths:List[Path], result:List[dict], runtime:List[float], niqe:List[float], is_stop:Event=None, lock:RLock=None):
-  upmodel = UpscaleModel(
-    args.model, 
-    model_size=(args.model_size, args.model_size), 
-    upscale_rate=4, 
-    tile_size=(args.tile_size, args.tile_size), 
-    padding=args.padding, 
-    device_id=thr_id,
-  )
-  
-  total = len(paths)
-  for idx, fp in enumerate((tqdm if thr_id == 0 else list)(paths)):
-    if is_stop.is_set(): return
-
-    # 加载图片
-    img = Image.open(fp)
-
-    # 模型推理
-    start = time()
-    res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0, ret_type='np')
-    end = time() - start
-    
-    if lock: lock.acquire()
-    runtime.append(end)
-    if lock: lock.release()
-
-    # 保存图片
-    if args.save:
-      fp_out = Path(args.output) / fp.name
-      Image.fromarray(res).save(fp_out)
-      output = Image.open(fp_out)
-    else:
-      output = res
-
-    # 计算niqe
-    niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
-
-    if lock: lock.acquire()
-    niqe.append(niqe_output)
-    result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
-    if lock: lock.release()
-
-    if thr_id == 0 and (idx + 1) % 10 == 0:
-      print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
-
-
 def run(args):
   # in/out paths
   if Path(args.input).is_file():
@@ -214,44 +165,45 @@ def run(args):
   if args.limit > 0: paths = paths[:args.limit]
   if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
+  # setup model
+  upmodel = UpscaleModel(
+    args.model, 
+    model_size=(args.model_size, args.model_size), 
+    upscale_rate=4, 
+    tile_size=(args.tile_size, args.tile_size), 
+    padding=args.padding, 
+    device_id=args.device,
+  )
+
   # workers & task
-  is_stop = Event()
+  start_all = time()
+  total = len(paths)
   result:  List[dict]  = []
   runtime: List[float] = []
   niqe:    List[float] = []
+  for idx, fp in enumerate(tqdm(paths)):
+    # 加载图片
+    img_low = Image.open(fp).convert('RGB')
 
-  start_all = time()
-  if args.n_worker == 0:
-    try:
-      worker(0, args, paths, result, runtime, niqe, is_stop, None)
-    except KeyboardInterrupt:
-      print('Exit by Ctrl+C')
-  else:
-    tpu_num = sail.get_available_tpu_num()
-    if args.n_worker < 0: args.n_worker = tpu_num
-    print('>> TPU num:', tpu_num)
-    print('>> n_worker:', args.n_worker)
+    # 模型推理
+    start = time()
+    im_high = upmodel.extract_and_enhance_tiles(img_low, upscale_ratio=4.0, ret_type='np')
+    end = time() - start
+    runtime.append(end)
 
-    part = math.ceil(len(paths) / args.n_worker)
-    lock = RLock()
-    thrs = [
-      Thread(target=worker, args=(i, args, paths[part*i:part*(i+1)], result, runtime, niqe, is_stop, lock), daemon=True) 
-        for i in range(args.n_worker)
-    ]
+    # 保存图片
+    if args.save:
+      Image.fromarray(im_high).save(Path(args.output) / fp.name)
 
-    try:
-      for thr in thrs:
-        thr.start()
-      for thr in thrs:
-        while True:
-          thr.join(timeout=5)
-          if not thr.is_alive():
-            break
-    except KeyboardInterrupt:
-      is_stop.set()
-      print('Exit by Ctrl+C')
-    finally:
-      thrs.clear()
+    # 计算niqe
+    niqe_output = calculate_niqe(im_high, 0, input_order='HWC', convert_to='y')
+    niqe.append(niqe_output)
+
+    result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
+
+    if (idx + 1) % 10 == 0:
+      print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
+
   end_all = time()
   time_all = end_all - start_all
   runtime_avg = mean(runtime)
@@ -262,8 +214,6 @@ def run(args):
   print('>> score:',    get_score(runtime_avg, niqe_avg))
 
   # gather results
-  if args.n_worker != 0:
-    result.sort(key=(lambda e: e['img_name']))    # re-order
   metrics = {
     'A': [{
       'model_size': os.path.getsize(args.model), 
@@ -281,15 +231,12 @@ def run(args):
 def get_parser():
   parser = ArgumentParser()
   parser.add_argument('-D', '--device', type=int,  default=0,           help='TPU device id')
-  parser.add_argument('-M', '--model',  type=Path, default=MODEL_FILE,  help='path to *.bmodel model ckpt')
+  parser.add_argument('-M', '--model',  type=Path, default='r-esrgan',  help='path to *.bmodel model ckpt, , or folder name under path models/')
   parser.add_argument('--model_size',   type=int,  default=200)
   parser.add_argument('--tile_size',    type=int,  default=196)
-  parser.add_argument('--padding',      type=int,  default=4)
+  parser.add_argument('--padding',      type=int,  default=16)
   parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,     help='input image or folder')
-  parser.add_argument('-O', '--output', type=Path, default=IMAGE_PATH,  help='output image folder')
-  parser.add_argument('-R', '--report', type=Path, default=REPORT_FILE, help='report model runtime to json file')
   parser.add_argument('-L', '--limit',  type=int,  default=-1,          help='limit run sample count')
-  parser.add_argument('--n_worker',     type=int,  default=0,           help='multi-thread workers')
   parser.add_argument('--save',         action='store_true',            help='save sr images')
   return parser
 
@@ -300,4 +247,19 @@ def get_args(parser:ArgumentParser=None):
 
 
 if __name__ == '__main__':
-  run(get_args())
+  args = get_args()
+
+  fp = Path(args.model)
+  if not fp.is_file():
+    dp: Path = MODEL_PATH / args.model
+    assert dp.is_dir(), 'should be a folder name under path models/'
+    fps = [fp for fp in dp.iterdir() if fp.suffix == '.bmodel']
+    assert len(fps) == 1, 'folder contains mutiplt *.bmodel files'
+    args.model = fps[0]
+
+  args.log_dp = OUT_PATH / Path(args.model).stem
+  args.log_dp.mkdir(exist_ok=True)
+  args.output = args.log_dp / 'test_sr'
+  args.report = args.log_dp / 'test.json'
+
+  run(args)

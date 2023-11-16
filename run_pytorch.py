@@ -22,8 +22,6 @@ MODEL_PATH  = BASE_PATH / 'models'
 LIB_PATH    = BASE_PATH / 'repo' / 'TPU-Coder-Cup' / 'CCF2023'
 IN_PATH     = BASE_PATH / 'data' / 'test'
 OUT_PATH    = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
-IMAGE_PATH  = OUT_PATH / 'test_sr'
-REPORT_FILE = OUT_PATH / 'test.json'
 
 Box = Tuple[slice, slice]
 
@@ -151,14 +149,17 @@ def run(args):
     paths = [Path(args.input)]
   else:
     paths = [Path(fp) for fp in sorted(glob.glob(os.path.join(str(args.input), '*')))]
+  if args.limit > 0: paths = paths[:args.limit]
   if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
-  # set models
+  # setup model
   model = TiledSRModel(args.model, padding=args.padding)
 
   start_all = time()
   total = len(paths)
-  result, runtime, niqe = [], [], []
+  result:  List[dict]  = []
+  runtime: List[float] = []
+  niqe:    List[float] = []
   for idx, fp in enumerate(tqdm(paths)):
     # 加载图片
     img = Image.open(fp).convert('RGB')
@@ -172,15 +173,11 @@ def run(args):
 
     # 保存图片
     if args.save:
-      fp_out = Path(args.output) / fp.name
       img = (np.asarray(im_high) * 255).astype(np.uint8)
-      Image.fromarray(img).save(fp_out)
-      output = Image.open(fp_out)
-    else:
-      output = im_high
+      Image.fromarray(img).save(Path(args.output) / fp.name)
 
     # 计算niqe
-    niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
+    niqe_output = calculate_niqe(im_high, 0, input_order='HWC', convert_to='y')
     niqe.append(niqe_output)
 
     result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
@@ -213,13 +210,12 @@ def run(args):
 
 if __name__ == '__main__':
   parser = ArgumentParser()
-  parser.add_argument('-M', '--model',  type=Path, default='r-esrgan',  help='path to *.pt model ckpt, or folder name under path models/')
+  parser.add_argument('-M', '--model',  type=Path, default='r-esrgan', help='path to *.pt model ckpt, or folder name under path models/')
   parser.add_argument('--padding',      type=int,  default=16)
   parser.add_argument('--batch_size',   type=int,  default=8)
-  parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,     help='input image or folder')
-  parser.add_argument('-O', '--output', type=Path, default=IMAGE_PATH,  help='output image folder')
-  parser.add_argument('-R', '--report', type=Path, default=REPORT_FILE, help='report model runtime to json file')
-  parser.add_argument('--save', action='store_true', help='save sr images')
+  parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,    help='input image or folder')
+  parser.add_argument('-L', '--limit',  type=int,  default=-1,         help='limit run sample count')
+  parser.add_argument('--save',         action='store_true',           help='save sr images')
   args = parser.parse_args()
 
   fp = Path(args.model)
@@ -229,5 +225,10 @@ if __name__ == '__main__':
     fps = [fp for fp in dp.iterdir() if fp.suffix == '.pt']
     assert len(fps) == 1, 'folder contains mutiplt *.pt files'
     args.model = fps[0]
+
+  args.log_dp = OUT_PATH / Path(args.model).stem
+  args.log_dp.mkdir(exist_ok=True)
+  args.output = args.log_dp / 'test_sr'
+  args.report = args.log_dp / 'test.json'
 
   run(args)
