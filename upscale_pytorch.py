@@ -6,40 +6,32 @@ import json
 from time import time
 from pathlib import Path
 from PIL import Image
-from PIL.Image import Image as PILImage
 from argparse import ArgumentParser
 import warnings ; warnings.simplefilter('ignore', category=RuntimeWarning)
-from typing import Union
+from typing import List, Tuple
 
 import torch
 from torch import Tensor
 from torch.nn import Module
-from numpy import ndarray 
+import numpy as np
+from numpy import ndarray
 from tqdm import tqdm
 
-BASE_PATH = Path(__file__).parent
-MODEL_PATH = BASE_PATH / 'models'
-MODEL_FILE = MODEL_PATH / 'r-esrgan' / 'r-esrgan4x+.pt'
-LIB_PATH = BASE_PATH / 'repo' / 'TPU-Coder-Cup' / 'CCF2023'
-IN_PATH = LIB_PATH / 'dataset' / 'test'
-OUT_PATH = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
-IMAGE_PATH = OUT_PATH / 'test_sr'
+BASE_PATH   = Path(__file__).parent
+MODEL_PATH  = BASE_PATH / 'models'
+LIB_PATH    = BASE_PATH / 'repo' / 'TPU-Coder-Cup' / 'CCF2023'
+IN_PATH     = BASE_PATH / 'data' / 'test'
+OUT_PATH    = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
+IMAGE_PATH  = OUT_PATH / 'test_sr'
 REPORT_FILE = OUT_PATH / 'test.json'
 
-
-if not MODEL_FILE.is_file():
-  MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
-  cwd = os.getcwd()
-  os.chdir(MODEL_FILE.parent)
-  os.system('wget -nc https://github.com/sophgo/TPU-Coder-Cup/raw/main/CCF2023/models/r-esrgan4x+.pt')
-  os.chdir(cwd)
+Box = Tuple[slice, slice]
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'>> device: {device}')
 
 # the contest scaffold
 sys.path.append(str(LIB_PATH))
-from fix import *
 from metrics.niqe import calculate_niqe
 
 mean = lambda x: sum(x) / len(x) if len(x) else 0.0
@@ -47,86 +39,110 @@ get_score = lambda niqe_score, i_time: math.sqrt(7 - niqe_score) / i_time * 200
 
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/upscale.py
-class UpscaleModel:
+class TiledSRModel:
 
-  def __init__(self, model_fp, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=4):
+  def __init__(self, model_fp:Path, model_size=(196, 256), padding=4):
+    print(f'>> load model: {model_fp.stem}')
     self.model: Module = torch.load(model_fp, map_location='cpu')
     self.model = self.model.eval().to(device)
+    print(f'>> param_cnt: {sum([p.numel() for p in self.model.parameters() if p.requires_grad])}')
     self.dtype = list(self.model.parameters())[0].dtype
-    self.model_size = model_size
-    self.upscale_rate = upscale_rate
-    self.tile_size = tile_size
+    self.upscale_rate = 4.0
+    self.tile_size = model_size  # (h, w)
     self.padding = padding
 
-  def calc_tile_position(self, width, height, col, row):
-    # generate mask
-    tile_left   = col * self.tile_size[0]
-    tile_top    = row * self.tile_size[1]
-    tile_right  = (col + 1) * self.tile_size[0] + self.padding
-    tile_bottom = (row + 1) * self.tile_size[1] + self.padding
-    if tile_right > height:
-      tile_right = height
-      tile_left = height - self.tile_size[0] - self.padding * 1
-    if tile_bottom > width:
-      tile_bottom = width
-      tile_top = width - self.tile_size[1] - self.padding * 1
-    return tile_top, tile_left, tile_bottom, tile_right
-
-  def calc_upscale_tile_position(self, tile_left, tile_top, tile_right, tile_bottom):
-    return [int(e * self.upscale_rate) for e in (tile_left, tile_top, tile_right, tile_bottom)]
+  @property
+  def tile_h(self): return self.tile_size[0]
+  @property
+  def tile_w(self): return self.tile_size[1]
 
   @torch.inference_mode()
-  def model_process(self, tile:PILImage):
-    # preprocess
-    ntile = tile.resize(self.model_size)  # (216, 216) => (200, 200)
-    ntile = np.asarray(ntile).astype(np.float32)
-    ntile = ntile / 255
-    ntile = np.transpose(ntile, (2, 0, 1))
-    ntile = ntile[np.newaxis, :, :, :]    # [B=1, C=3, H=200, W=200]
-    # model forward
-    X = torch.from_numpy(ntile).to(device=device, dtype=self.dtype)
-    out: Tensor = self.model(X)           # [B=1, C=3, H=800, W=800]
-    out = out.clamp_(0.0, 1.0)
-    res = out[0].cpu().numpy()            # [C=3, H=800, W=800]
-    # extract padding
-    res = np.transpose(res, (1, 2, 0))
-    res = res * 255
-    res = res.astype(np.uint8)
-    res = Image.fromarray(res)
-    res = res.resize(self.target_tile_size)   # (800, 800) => (864, 864)
-    return res
+  def __call__(self, im:ndarray, bs:int=4) -> ndarray:
+    DEBUG = False
+    DEBUG_IMG = False
 
-  def extract_and_enhance_tiles(self, image:PILImage, upscale_ratio:float=2.0, ret_type:str='pil') -> Union[PILImage, ndarray]:
-    if image.mode != 'RGB': image = image.convert('RGB')
-    # 获取图像的宽度和高度
-    width, height = image.size
-    self.upscale_rate = upscale_ratio
-    self.target_tile_size = (int((self.tile_size[0] + self.padding * 1) * upscale_ratio), int((self.tile_size[1] + self.padding * 1) * upscale_ratio))
-    target_width, target_height = int(width * upscale_ratio), int(height * upscale_ratio)
-    # 计算瓦片的列数和行数
-    num_cols = math.ceil((width  - self.padding) / self.tile_size[0])
-    num_rows = math.ceil((height - self.padding) / self.tile_size[1])
+    # [H, W, C=3]
+    H, W, C = im.shape
+    H_tgt, W_tgt = int(H * self.upscale_rate), int(W * self.upscale_rate)
+    if DEBUG: print('im.shape:', im.shape)
+    # tile count along aixs
+    num_rows = math.ceil((H - self.padding) / (self.tile_h - self.padding))
+    num_cols = math.ceil((W - self.padding) / (self.tile_w - self.padding))
+    if DEBUG: print(f'tiles: {num_rows} x {num_cols}')
+    # uncrop (zero padding)
+    H_ex = num_rows * self.tile_h - ((num_rows - 1) * self.padding)
+    W_ex = num_cols * self.tile_w - ((num_cols - 1) * self.padding)
+    im_ex = np.zeros([H_ex, W_ex, C], dtype=im.dtype)
+    if DEBUG: print('im_ex.shape:', im_ex.shape)
+    # relocate top-left origin
+    init_y = (H_ex - H) // 2
+    init_x = (W_ex - W) // 2
+    # paste original image in the center
+    im_ex[init_y:init_y+H, init_x:init_x+W, :] = im
 
-    # 遍历每个瓦片的行和列索引
-    img_tiles = []
-    for row in range(num_rows):
-      img_h_tiles = []
-      for col in range(num_cols):
-        # 计算瓦片的左上角和右下角坐标
-        tile_left, tile_top, tile_right, tile_bottom = self.calc_tile_position(width, height, row, col)
-        # 裁剪瓦片
-        tile = image.crop((tile_left, tile_top, tile_right, tile_bottom))
-        # 使用超分辨率模型放大瓦片
-        upscaled_tile = self.model_process(tile)
-        # 将放大后的瓦片粘贴到输出图像上
-        # overlap
-        ntile = np.asarray(upscaled_tile).astype(np.float32)
-        ntile = np.transpose(ntile, (2, 0, 1))
-        img_h_tiles.append(ntile)
-      img_tiles.append(img_h_tiles)
-    res = imgFusion(img_list=img_tiles, overlap=int(self.padding * upscale_ratio), res_w=target_width, res_h=target_height)
-    im = np.transpose(res, (1, 2, 0)).astype(np.uint8)
-    return im if ret_type == 'np' else Image.fromarray(im)
+    if DEBUG_IMG: Image.fromarray((np.asarray(im_ex)*255).astype(np.uint8)).show()
+
+    # [B=1, C=3, H_ex, W_ex]
+    X = torch.from_numpy(np.transpose(im_ex, (2, 0, 1))).unsqueeze_(0)
+    X = X.to(device=device, dtype=self.dtype)
+
+    # break up tiles
+    boxes_low:  List[Box] = []
+    boxes_high: List[Box] = []
+    y = 0
+    while y + self.padding < H_ex:
+      x = 0
+      while x + self.padding < W_ex:
+        boxes_low.append((
+          slice(y, y + self.tile_h), 
+          slice(x, x + self.tile_w),
+        ))
+        boxes_high.append((
+          slice(int(y * self.upscale_rate), int((y + self.tile_h) * self.upscale_rate)), 
+          slice(int(x * self.upscale_rate), int((x + self.tile_w) * self.upscale_rate)),
+        ))
+        x += self.tile_w - self.padding
+      y += self.tile_h - self.padding
+    n_tiles = len(boxes_low)
+    assert n_tiles == num_rows * num_cols
+    if DEBUG: print('n_tiles:', n_tiles)
+
+    # forward & sew up tiles
+    H_ex_tgt, W_ex_tgt = int(H_ex * self.upscale_rate), int(W_ex * self.upscale_rate)
+    canvas = torch.zeros([C, H_ex_tgt, W_ex_tgt], device=device, dtype=self.dtype)
+    count  = torch.zeros([   H_ex_tgt, W_ex_tgt], device=device, dtype=torch.int32)
+    while len(boxes_low):
+      batch_low,  boxes_low  = boxes_low [:bs], boxes_low [bs:]
+      batch_high, boxes_high = boxes_high[:bs], boxes_high[bs:]
+      # [B, C, H_tile=192, W_tile=256]
+      tiles_low = [X[:, :, slice_h, slice_w] for slice_h, slice_w in batch_low]
+      if DEBUG: print('tile sizes:', [tuple(e.shape[2:]) for e in tiles_low])
+      XT = torch.concat(tiles_low, dim=0)
+      # [B, C, H_tile*F=764, W_tile*F=1024]
+      tiles_high: List[Tensor] = self.model(XT)
+      # paste to canvas
+      for tile, (high_h, high_w) in zip(tiles_high, batch_high):
+        count [   high_h, high_w] += 1
+        canvas[:, high_h, high_w] += tile
+
+    # handle overlap
+    out_ex = torch.where(count > 1, canvas / count, canvas)
+
+    if DEBUG_IMG: Image.fromarray((out_ex.permute([1, 2, 0]).cpu().numpy().clip(0.0, 1.0)*255).astype(np.uint8)).show()
+
+    # crop
+    fin_y = int(init_y * self.upscale_rate)
+    fin_x = int(init_x * self.upscale_rate)
+    out = out_ex[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
+    # vrng, to HWC
+    out = out.permute([1, 2, 0])
+    # numpy & clip
+    out_np: ndarray = out.cpu().numpy()
+    out_np = out_np.clip(0.0, 1.0)
+
+    if DEBUG_IMG: Image.fromarray((out_np*255).astype(np.uint8)).show()
+
+    return out_np
 
 
 def run(args):
@@ -138,34 +154,30 @@ def run(args):
   if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
   # set models
-  upmodel = UpscaleModel(
-    args.model, 
-    model_size=(args.model_size, args.model_size), 
-    upscale_rate=4, 
-    tile_size=(args.tile_size, args.tile_size), 
-    padding=args.padding, 
-  )
+  model = TiledSRModel(args.model, padding=args.padding)
 
   start_all = time()
   total = len(paths)
   result, runtime, niqe = [], [], []
   for idx, fp in enumerate(tqdm(paths)):
     # 加载图片
-    img = Image.open(fp)
+    img = Image.open(fp).convert('RGB')
+    im_low = np.asarray(img, dtype=np.float32) / 255.0
 
     # 模型推理
     start = time()
-    res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0, ret_type='np')
+    im_high = model(im_low, bs=args.batch_size)
     end = time() - start
     runtime.append(end)
 
     # 保存图片
     if args.save:
       fp_out = Path(args.output) / fp.name
-      Image.fromarray(res).save(fp_out)
+      img = (np.asarray(im_high) * 255).astype(np.uint8)
+      Image.fromarray(img).save(fp_out)
       output = Image.open(fp_out)
     else:
-      output = res
+      output = im_high
 
     # 计算niqe
     niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
@@ -201,14 +213,21 @@ def run(args):
 
 if __name__ == '__main__':
   parser = ArgumentParser()
-  parser.add_argument('-M', '--model',  type=Path, default=MODEL_FILE, help='path to *.pt model ckpt')
-  parser.add_argument('--model_size',   type=int,  default=200)
-  parser.add_argument('--tile_size',    type=int,  default=196)
-  parser.add_argument('--padding',      type=int,  default=4)
+  parser.add_argument('-M', '--model',  type=Path, default='r-esrgan',  help='path to *.pt model ckpt, or folder name under path models/')
+  parser.add_argument('--padding',      type=int,  default=16)
+  parser.add_argument('--batch_size',   type=int,  default=8)
   parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,     help='input image or folder')
   parser.add_argument('-O', '--output', type=Path, default=IMAGE_PATH,  help='output image folder')
   parser.add_argument('-R', '--report', type=Path, default=REPORT_FILE, help='report model runtime to json file')
   parser.add_argument('--save', action='store_true', help='save sr images')
   args = parser.parse_args()
+
+  fp = Path(args.model)
+  if not fp.is_file():
+    dp: Path = MODEL_PATH / args.model
+    assert dp.is_dir(), 'should be a folder name under path models/'
+    fps = [fp for fp in dp.iterdir() if fp.suffix == '.pt']
+    assert len(fps) == 1, 'folder contains mutiplt *.pt files'
+    args.model = fps[0]
 
   run(args)
