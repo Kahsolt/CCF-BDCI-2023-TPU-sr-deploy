@@ -8,6 +8,10 @@ data/
 # ref
 ref/
 
+# results
+out/
+log
+
 # converted model ckpts
 models/*
 !models/*.py
