@@ -34,6 +34,7 @@ from fix import imgFusion2
 from metrics.niqe import calculate_niqe
 
 mean = lambda x: sum(x) / len(x) if len(x) else 0.0
+get_score = lambda niqe_score, i_time: math.sqrt(7 - niqe_score) / i_time * 200
 
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/fix.py
@@ -271,6 +272,7 @@ def run(args):
   print('time_all:',    rec['time_all'])
   print('runtime_avg:', rec['runtime_avg'])
   print('niqe_avg:',    rec['niqe_avg'])
+  print('>> score:',    get_score(rec['niqe_avg'], rec['runtime_avg']))
 
   print(f'>> saving to {args.report}')
   with open(args.report, 'w', encoding='utf-8') as fh:
