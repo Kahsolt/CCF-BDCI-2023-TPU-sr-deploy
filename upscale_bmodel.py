@@ -23,9 +23,12 @@ OUT_PATH = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
 IMAGE_PATH = OUT_PATH / 'test_sr'
 REPORT_FILE = OUT_PATH / 'test.json'
 
-# the contest scaffold
+# TPU engine sdk
+import sophon.sail as sail
+sail.set_print_flag(False)
+sail.set_dump_io_flag(False)
+# contest scaffolds
 sys.path.append(str(LIB_PATH))
-import sophon.sail as sail ; sail.set_print_flag(False)
 from fix import imgFusion2
 from metrics.niqe import calculate_niqe
 
