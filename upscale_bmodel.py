@@ -8,29 +8,79 @@ from pathlib import Path
 from PIL import Image
 from PIL.Image import Image as PILImage
 from argparse import ArgumentParser
-import warnings
+import warnings ; warnings.simplefilter('ignore', category=RuntimeWarning)
+from typing import List
 
 import numpy as np
 from numpy import ndarray
+from tqdm import tqdm
 
 BASE_PATH = Path(__file__).parent
 MODEL_FILE = BASE_PATH / 'model.bmodel'
 LIB_PATH = BASE_PATH / 'TPU-Coder-Cup' / 'CCF2023'
 IN_PATH = BASE_PATH / 'test'
 OUT_PATH = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
+IMAGE_PATH = OUT_PATH / 'test_sr'
+REPORT_FILE = OUT_PATH / 'test.json'
 
 # the contest scaffold
 sys.path.append(str(LIB_PATH))
-from fix import *
+import sophon.sail as sail ; sail.set_print_flag(False)
+from fix import imgFusion2
 from metrics.niqe import calculate_niqe
-from npuengine import EngineOV
+
+mean = lambda x: sum(x) / len(x) if len(x) else 0.0
+
+
+# ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/fix.py
+def imgFusion(img_list, overlap, res_w, res_h):
+  pre_v_img = None
+  for vi in range(len(img_list)):
+    h_img = np.transpose(img_list[vi][0], (1,2,0))
+    for hi in range(1, len(img_list[vi])):
+      new_img = np.transpose(img_list[vi][hi], (1,2,0))
+      h_img = imgFusion2(h_img, new_img, (h_img.shape[1]+new_img.shape[1]-res_w) if (hi == len(img_list[vi])-1) else overlap, True)
+    pre_v_img = h_img if pre_v_img is None else imgFusion2(pre_v_img, h_img, (pre_v_img.shape[0]+h_img.shape[0]-res_h) if vi == len(img_list)-1 else overlap, False)
+  return np.transpose(pre_v_img, (2,0,1))
+
+
+# ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/npuengine.py
+class EngineOV:
+
+  def __init__(self, model_path:str, device_id:int=0):
+    if 'DEVICE_ID' in os.environ:
+      device_id = int(os.environ['DEVICE_ID'])
+      print('>> device_id is in os.environ. and device_id = ', device_id)
+    try:
+      self.model = sail.Engine(model_path, device_id, sail.IOMode.SYSIO)
+    except Exception as e:
+      print('load model error; please check model path and device status')
+      print('>> model_path: ', model_path)
+      print('>> device_id: ', device_id)
+      print('>> sail.Engine error: ', e)
+      raise e
+
+    self.model_path  = model_path
+    self.device_id   = device_id
+    self.graph_name  = self.model.get_graph_names()[0]
+    self.input_name  = self.model.get_input_names(self.graph_name)
+    self.output_name = self.model.get_output_names(self.graph_name)
+
+  def __str__(self):
+    return f'EngineOV: model_path={self.model_path}, device_id={self.device_id}'
+
+  def __call__(self, values:list):
+    assert isinstance(values, list), 'input should be a list'
+    input = { self.input_name[i]: values[i] for i in range(len(values)) }
+    output = self.model.process(self.graph_name, input)
+    return [output[name] for name in self.output_name]
 
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/upscale.py
 class UpscaleModel:
 
   def __init__(self, model_fp, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=4, device_id=0):
-    self.model = EngineOV(str(model_fp), device_id=device_id)
+    self.model = EngineOV(str(model_fp), device_id)
     self.model_size = model_size
     self.upscale_rate = upscale_rate
     self.tile_size = tile_size
@@ -71,7 +121,7 @@ class UpscaleModel:
     res = res.resize(self.target_tile_size)   # (800, 800) => (864, 864)
     return res
 
-  def extract_and_enhance_tiles(self, image:PILImage, upscale_ratio:float=2.0):
+  def extract_and_enhance_tiles(self, image:PILImage, upscale_ratio:float=2.0) -> PILImage:
     if image.mode != 'RGB':
       image = image.convert('RGB')
     # 获取图像的宽度和高度
@@ -111,42 +161,52 @@ def run(args):
     paths = [Path(args.input)]
   else:
     paths = [Path(fp) for fp in sorted(glob.glob(os.path.join(str(args.input), '*')))]
-  Path(args.output).mkdir(parents=True, exist_ok=True)
+  if args.limit > 0: paths = paths[:args.limit]
+  if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
   # set models
-  upmodel = UpscaleModel(args.model_path, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=20)
+  upmodel = UpscaleModel(args.model, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=20, device_id=args.device)
 
   start_all = time()
-  result, runtime, niqe = [], [], []
-  for idx, fp in enumerate(paths):
-    # 加载图片
-    print(f'Testing {idx}: {fp.name}')
-    img = Image.open(fp)
+  result: List[dict] = []
+  runtime: List[float] = []
+  niqe: List[float] = []
+  total = len(paths)
+  try:
+    for idx, fp in enumerate(tqdm(paths)):
+      # 加载图片
+      img = Image.open(fp)
 
-    # 模型推理
-    start = time()
-    res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0)
-    end = format((time() - start), '.4f')
-    runtime.append(end)
+      # 模型推理
+      start = time()
+      res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0)
+      end = time() - start
+      runtime.append(end)
 
-    # 保存图片
-    fp_out = Path(args.output) / fp.name
-    res.save(fp_out)
+      # 保存图片
+      if args.save:
+        fp_out = Path(args.output) / fp.name
+        res.save(fp_out)
+        img = Image.open(fp_out)
+      else:
+        img = res
 
-    # 计算niqe
-    img = Image.open(fp_out)
-    output = np.asarray(img)
-    with warnings.catch_warnings():
-      warnings.simplefilter('ignore', category=RuntimeWarning)
+      # 计算niqe
+      output = np.asarray(img)
+      #with warnings.catch_warnings():
       niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
-    niqe_output = format(niqe_output, '.4f')
-    niqe.append(niqe_output)
+      niqe.append(niqe_output)
 
-    result.append({'img_name': fp.stem, 'runtime': end, 'niqe': niqe_output})
+      if (idx + 1) % 10 == 0:
+        print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
 
-  model_file_size = os.path.getsize(args.model_path)
-  runtime_avg = np.mean(np.asarray(runtime, dtype=float))
-  niqe_avg = np.mean(np.asarray(niqe, dtype=float))
+      result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
+  except KeyboardInterrupt:
+    print('Exit by Ctrl+C')
+
+  model_file_size = os.path.getsize(args.model)
+  runtime_avg = mean(runtime)
+  niqe_avg = mean(niqe)
 
   end_all = time()
   time_all = end_all - start_all
@@ -168,10 +228,13 @@ def run(args):
 
 if __name__ == '__main__':
   parser = ArgumentParser()
-  parser.add_argument('-M', '--model_path', type=Path, default=MODEL_FILE,             help='path to *.bmodel model ckpt')
-  parser.add_argument('-I', '--input',      type=Path, default=IN_PATH,                help='input image or folder')
-  parser.add_argument('-O', '--output',     type=Path, default=OUT_PATH / 'test_sr',   help='output image folder')
-  parser.add_argument('-R', '--report',     type=Path, default=OUT_PATH / 'test.json', help='report model runtime to json file')
+  parser.add_argument('-D', '--device', type=int,  default=0,           help='TPU device id')
+  parser.add_argument('-M', '--model',  type=Path, default=MODEL_FILE,  help='path to *.bmodel model ckpt')
+  parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,     help='input image or folder')
+  parser.add_argument('-O', '--output', type=Path, default=IMAGE_PATH,  help='output image folder')
+  parser.add_argument('-R', '--report', type=Path, default=REPORT_FILE, help='report model runtime to json file')
+  parser.add_argument('-L', '--limit',  type=int,  default=-1, help='limit run sample count')
+  parser.add_argument('--save', action='store_true', help='save sr images')
   args = parser.parse_args()
 
   run(args)
