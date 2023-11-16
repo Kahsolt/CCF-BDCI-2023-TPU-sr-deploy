@@ -8,6 +8,9 @@ data/
 # ref
 ref/
 
+# converted model ckpts
+models/
+
 # repo
 repo/*
 !repo/*.cmd
