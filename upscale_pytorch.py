@@ -8,11 +8,14 @@ from pathlib import Path
 from PIL import Image
 from PIL.Image import Image as PILImage
 from argparse import ArgumentParser
-import warnings
+import warnings ; warnings.simplefilter('ignore', category=RuntimeWarning)
+from typing import Union
 
 import torch
 from torch import Tensor
 from torch.nn import Module
+from numpy import ndarray 
+from tqdm import tqdm
 
 BASE_PATH = Path(__file__).parent
 MODEL_PATH = BASE_PATH / 'models'
@@ -20,6 +23,9 @@ MODEL_FILE = MODEL_PATH / 'r-esrgan' / 'r-esrgan4x+.pt'
 LIB_PATH = BASE_PATH / 'repo' / 'TPU-Coder-Cup' / 'CCF2023'
 IN_PATH = LIB_PATH / 'dataset' / 'test'
 OUT_PATH = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
+IMAGE_PATH = OUT_PATH / 'test_sr'
+REPORT_FILE = OUT_PATH / 'test.json'
+
 
 if not MODEL_FILE.is_file():
   MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -29,11 +35,15 @@ if not MODEL_FILE.is_file():
   os.chdir(cwd)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f'>> device: {device}')
 
 # the contest scaffold
 sys.path.append(str(LIB_PATH))
 from fix import *
 from metrics.niqe import calculate_niqe
+
+mean = lambda x: sum(x) / len(x) if len(x) else 0.0
+get_score = lambda niqe_score, i_time: math.sqrt(7 - niqe_score) / i_time * 200
 
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/upscale.py
@@ -86,14 +96,12 @@ class UpscaleModel:
     res = res.resize(self.target_tile_size)   # (800, 800) => (864, 864)
     return res
 
-  def extract_and_enhance_tiles(self, image:PILImage, upscale_ratio:float=2.0):
-    if image.mode != 'RGB':
-      image = image.convert('RGB')
+  def extract_and_enhance_tiles(self, image:PILImage, upscale_ratio:float=2.0, ret_type:str='pil') -> Union[PILImage, ndarray]:
+    if image.mode != 'RGB': image = image.convert('RGB')
     # 获取图像的宽度和高度
     width, height = image.size
     self.upscale_rate = upscale_ratio
-    self.target_tile_size = (int((self.tile_size[0] + self.padding * 1) * upscale_ratio),
-                 int((self.tile_size[1] + self.padding * 1) * upscale_ratio))
+    self.target_tile_size = (int((self.tile_size[0] + self.padding * 1) * upscale_ratio), int((self.tile_size[1] + self.padding * 1) * upscale_ratio))
     target_width, target_height = int(width * upscale_ratio), int(height * upscale_ratio)
     # 计算瓦片的列数和行数
     num_cols = math.ceil((width  - self.padding) / self.tile_size[0])
@@ -117,8 +125,8 @@ class UpscaleModel:
         img_h_tiles.append(ntile)
       img_tiles.append(img_h_tiles)
     res = imgFusion(img_list=img_tiles, overlap=int(self.padding * upscale_ratio), res_w=target_width, res_h=target_height)
-    res = Image.fromarray(np.transpose(res, (1, 2, 0)).astype(np.uint8))
-    return res
+    im = np.transpose(res, (1, 2, 0)).astype(np.uint8)
+    return im if ret_type == 'np' else Image.fromarray(im)
 
 
 def run(args):
@@ -127,67 +135,80 @@ def run(args):
     paths = [Path(args.input)]
   else:
     paths = [Path(fp) for fp in sorted(glob.glob(os.path.join(str(args.input), '*')))]
-  Path(args.output).mkdir(parents=True, exist_ok=True)
+  if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
   # set models
-  upmodel = UpscaleModel(args.model_path, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=20)
+  upmodel = UpscaleModel(
+    args.model, 
+    model_size=(args.model_size, args.model_size), 
+    upscale_rate=4, 
+    tile_size=(args.tile_size, args.tile_size), 
+    padding=args.padding, 
+  )
 
   start_all = time()
+  total = len(paths)
   result, runtime, niqe = [], [], []
-  for idx, fp in enumerate(paths):
+  for idx, fp in enumerate(tqdm(paths)):
     # 加载图片
-    print(f'Testing {idx}: {fp.name}')
     img = Image.open(fp)
 
     # 模型推理
     start = time()
-    res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0)
-    end = format((time() - start), '.4f')
+    res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0, ret_type='np')
+    end = time() - start
     runtime.append(end)
 
     # 保存图片
-    fp_out = Path(args.output) / fp.name
-    res.save(fp_out)
+    if args.save:
+      fp_out = Path(args.output) / fp.name
+      Image.fromarray(res).save(fp_out)
+      output = Image.open(fp_out)
+    else:
+      output = res
 
     # 计算niqe
-    img = Image.open(fp_out)
-    output = np.asarray(img)
-    with warnings.catch_warnings():
-      warnings.simplefilter('ignore', category=RuntimeWarning)
-      niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
-    niqe_output = format(niqe_output, '.4f')
+    niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
     niqe.append(niqe_output)
 
-    result.append({'img_name': fp.stem, 'runtime': end, 'niqe': niqe_output})
+    result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
 
-  model_file_size = os.path.getsize(args.model_path)
-  runtime_avg = np.mean(np.asarray(runtime, dtype=float))
-  niqe_avg = np.mean(np.asarray(niqe, dtype=float))
+    if (idx + 1) % 10 == 0:
+      print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
 
   end_all = time()
   time_all = end_all - start_all
-  print('time_all:', time_all)
+  runtime_avg = mean(runtime)
+  niqe_avg = mean(niqe)
+  print('time_all:',    time_all)
+  print('runtime_avg:', runtime_avg)
+  print('niqe_avg:',    niqe_avg)
+  print('>> score:',    get_score(runtime_avg, niqe_avg))
+
   metrics = {
     'A': [{
-      'model_size': model_file_size, 
+      'model_size': os.path.getsize(args.model), 
       'time_all': time_all, 
       'runtime_avg': format(runtime_avg, '.4f'),
       'niqe_avg': format(niqe_avg, '.4f'), 
       'images': result,
     }]
   }
-  print('metrics:', metrics)
-
+  print(f'>> saving to {args.report}')
   with open(args.report, 'w', encoding='utf-8') as fh:
     json.dump(metrics, fh, indent=2, ensure_ascii=False)
 
 
 if __name__ == '__main__':
   parser = ArgumentParser()
-  parser.add_argument('-M', '--model_path', type=Path, default=MODEL_FILE,             help='path to *.pt model ckpt')
-  parser.add_argument('-I', '--input',      type=Path, default=IN_PATH,                help='input image or folder')
-  parser.add_argument('-O', '--output',     type=Path, default=OUT_PATH / 'test_sr',   help='output image folder')
-  parser.add_argument('-R', '--report',     type=Path, default=OUT_PATH / 'test.json', help='report model runtime to json file')
+  parser.add_argument('-M', '--model',  type=Path, default=MODEL_FILE, help='path to *.pt model ckpt')
+  parser.add_argument('--model_size',   type=int,  default=200)
+  parser.add_argument('--tile_size',    type=int,  default=196)
+  parser.add_argument('--padding',      type=int,  default=4)
+  parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,     help='input image or folder')
+  parser.add_argument('-O', '--output', type=Path, default=IMAGE_PATH,  help='output image folder')
+  parser.add_argument('-R', '--report', type=Path, default=REPORT_FILE, help='report model runtime to json file')
+  parser.add_argument('--save', action='store_true', help='save sr images')
   args = parser.parse_args()
 
   run(args)

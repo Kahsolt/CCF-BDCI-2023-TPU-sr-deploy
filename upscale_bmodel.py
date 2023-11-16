@@ -189,12 +189,11 @@ def worker(thr_id:int, args, paths:List[Path], result:List[dict], runtime:List[f
     if args.save:
       fp_out = Path(args.output) / fp.name
       Image.fromarray(res).save(fp_out)
-      img = Image.open(fp_out)
+      output = Image.open(fp_out)
     else:
-      img = res
+      output = res
 
     # 计算niqe
-    output = np.asarray(img)
     niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
 
     if lock: lock.acquire()
@@ -255,10 +254,16 @@ def run(args):
       thrs.clear()
   end_all = time()
   time_all = end_all - start_all
-  print('time_all:', time_all)
+  runtime_avg = mean(runtime)
+  niqe_avg = mean(niqe)
+  print('time_all:',    time_all)
+  print('runtime_avg:', runtime_avg)
+  print('niqe_avg:',    niqe_avg)
+  print('>> score:',    get_score(runtime_avg, niqe_avg))
 
   # gather results
-  result.sort(key=(lambda e: e['img_name']))    # re-order
+  if args.n_worker != 0:
+    result.sort(key=(lambda e: e['img_name']))    # re-order
   metrics = {
     'A': [{
       'model_size': os.path.getsize(args.model), 
@@ -268,12 +273,6 @@ def run(args):
       'images': result,
     }]
   }
-  rec = metrics['A'][0]
-  print('time_all:',    rec['time_all'])
-  print('runtime_avg:', rec['runtime_avg'])
-  print('niqe_avg:',    rec['niqe_avg'])
-  print('>> score:',    get_score(rec['niqe_avg'], rec['runtime_avg']))
-
   print(f'>> saving to {args.report}')
   with open(args.report, 'w', encoding='utf-8') as fh:
     json.dump(metrics, fh, indent=2, ensure_ascii=False)
