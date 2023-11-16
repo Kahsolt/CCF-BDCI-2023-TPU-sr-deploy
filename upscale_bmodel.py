@@ -4,6 +4,7 @@ import glob
 import math
 import json
 from time import time
+from threading import Thread, Event, RLock
 from pathlib import Path
 from PIL import Image
 from PIL.Image import Image as PILImage
@@ -158,6 +159,42 @@ class UpscaleModel:
     return res
 
 
+def worker(thr_id:int, lock:RLock, is_stop:Event, args, paths:List[Path], result:List[dict], runtime:List[float], niqe:List[float]):
+  upmodel = UpscaleModel(args.model, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=20, device_id=thr_id)
+
+  total = len(paths)
+  for idx, fp in enumerate((tqdm if thr_id == 0 else list)(paths)):
+    if is_stop.is_set(): return
+
+    # 加载图片
+    img = Image.open(fp)
+
+    # 模型推理
+    start = time()
+    res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0)
+    end = time() - start
+    with lock:
+      runtime.append(end)
+
+    # 保存图片
+    if args.save:
+      fp_out = Path(args.output) / fp.name
+      res.save(fp_out)
+      img = Image.open(fp_out)
+    else:
+      img = res
+
+    # 计算niqe
+    output = np.asarray(img)
+    niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
+    with lock:
+      niqe.append(niqe_output)
+      result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
+
+    if thr_id == 0 and (idx + 1) % 10 == 0:
+      print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
+
+
 def run(args):
   # in/out paths
   if Path(args.input).is_file():
@@ -167,64 +204,54 @@ def run(args):
   if args.limit > 0: paths = paths[:args.limit]
   if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
-  # set models
-  upmodel = UpscaleModel(args.model, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=20, device_id=args.device)
-
-  start_all = time()
-  result: List[dict] = []
+  # workers & task
+  lock = RLock()
+  is_stop = Event()
+  part = math.ceil(len(paths) / args.n_worker)
+  result:  List[dict]  = []
   runtime: List[float] = []
-  niqe: List[float] = []
-  total = len(paths)
+  niqe:    List[float] = []
+  thrs = [
+    Thread(target=worker, args=(i, lock, is_stop, args, paths[part*i:part*(i+1)], result, runtime, niqe), daemon=True) 
+      for i in range(args.n_worker)
+  ]
+
+  # gogogo
+  start_all = time()
   try:
-    for idx, fp in enumerate(tqdm(paths)):
-      # 加载图片
-      img = Image.open(fp)
+    for thr in thrs:
+      thr.start()
 
-      # 模型推理
-      start = time()
-      res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0)
-      end = time() - start
-      runtime.append(end)
-
-      # 保存图片
-      if args.save:
-        fp_out = Path(args.output) / fp.name
-        res.save(fp_out)
-        img = Image.open(fp_out)
-      else:
-        img = res
-
-      # 计算niqe
-      output = np.asarray(img)
-      #with warnings.catch_warnings():
-      niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
-      niqe.append(niqe_output)
-
-      if (idx + 1) % 10 == 0:
-        print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
-
-      result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
+    for thr in thrs:
+      while True:
+        thr.join(timeout=5)
+        if not thr.is_alive():
+          break
   except KeyboardInterrupt:
+    is_stop.set()
     print('Exit by Ctrl+C')
-
-  model_file_size = os.path.getsize(args.model)
-  runtime_avg = mean(runtime)
-  niqe_avg = mean(niqe)
-
+  finally:
+    thrs.clear()
   end_all = time()
   time_all = end_all - start_all
   print('time_all:', time_all)
+
+  # gather results
+  result.sort(key=(lambda e: e['img_name']))    # re-order
   metrics = {
     'A': [{
-      'model_size': model_file_size, 
+      'model_size': os.path.getsize(args.model), 
       'time_all': time_all, 
-      'runtime_avg': format(runtime_avg, '.4f'),
-      'niqe_avg': format(niqe_avg, '.4f'), 
+      'runtime_avg': format(mean(runtime), '.4f'),
+      'niqe_avg': format(mean(niqe), '.4f'), 
       'images': result,
     }]
   }
-  print('metrics:', metrics)
+  print('time_all:', metrics['A']['time_all'])
+  print('runtime_avg:', metrics['A']['runtime_avg'])
+  print('niqe_avg:', metrics['A']['niqe_avg'])
 
+  print(f'>> saving to {args.report}')
   with open(args.report, 'w', encoding='utf-8') as fh:
     json.dump(metrics, fh, indent=2, ensure_ascii=False)
 
@@ -237,7 +264,10 @@ if __name__ == '__main__':
   parser.add_argument('-O', '--output', type=Path, default=IMAGE_PATH,  help='output image folder')
   parser.add_argument('-R', '--report', type=Path, default=REPORT_FILE, help='report model runtime to json file')
   parser.add_argument('-L', '--limit',  type=int,  default=-1, help='limit run sample count')
+  parser.add_argument('--n_worker',     type=int,  default=1,  help='multi-thread workers')
   parser.add_argument('--save', action='store_true', help='save sr images')
   args = parser.parse_args()
+
+  print('TPU num:', sail.get_available_tpu_num())
 
   run(args)
