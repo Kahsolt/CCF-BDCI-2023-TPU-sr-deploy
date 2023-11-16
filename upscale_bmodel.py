@@ -159,7 +159,7 @@ class UpscaleModel:
     return res
 
 
-def worker(thr_id:int, lock:RLock, is_stop:Event, args, paths:List[Path], result:List[dict], runtime:List[float], niqe:List[float]):
+def worker(thr_id:int, args, paths:List[Path], result:List[dict], runtime:List[float], niqe:List[float], is_stop:Event=None, lock:RLock=None):
   upmodel = UpscaleModel(args.model, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=20, device_id=thr_id)
 
   total = len(paths)
@@ -173,8 +173,10 @@ def worker(thr_id:int, lock:RLock, is_stop:Event, args, paths:List[Path], result
     start = time()
     res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0)
     end = time() - start
-    with lock:
-      runtime.append(end)
+    
+    if lock: lock.acquire()
+    runtime.append(end)
+    if lock: lock.release()
 
     # 保存图片
     if args.save:
@@ -187,9 +189,11 @@ def worker(thr_id:int, lock:RLock, is_stop:Event, args, paths:List[Path], result
     # 计算niqe
     output = np.asarray(img)
     niqe_output = calculate_niqe(output, 0, input_order='HWC', convert_to='y')
-    with lock:
-      niqe.append(niqe_output)
-      result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
+
+    if lock: lock.acquire()
+    niqe.append(niqe_output)
+    result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
+    if lock: lock.release()
 
     if thr_id == 0 and (idx + 1) % 10 == 0:
       print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
@@ -205,33 +209,43 @@ def run(args):
   if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
   # workers & task
-  lock = RLock()
   is_stop = Event()
-  part = math.ceil(len(paths) / args.n_worker)
   result:  List[dict]  = []
   runtime: List[float] = []
   niqe:    List[float] = []
-  thrs = [
-    Thread(target=worker, args=(i, lock, is_stop, args, paths[part*i:part*(i+1)], result, runtime, niqe), daemon=True) 
-      for i in range(args.n_worker)
-  ]
 
-  # gogogo
   start_all = time()
-  try:
-    for thr in thrs:
-      thr.start()
+  if args.n_worker == 0:
+    try:
+      worker(0, args, paths, result, runtime, niqe, is_stop, None)
+    except KeyboardInterrupt:
+      print('Exit by Ctrl+C')
+  else:
+    tpu_num = sail.get_available_tpu_num()
+    if args.n_worker < 0: args.n_worker = tpu_num
+    print('>> TPU num:', tpu_num)
+    print('>> n_worker:', args.n_worker)
 
-    for thr in thrs:
-      while True:
-        thr.join(timeout=5)
-        if not thr.is_alive():
-          break
-  except KeyboardInterrupt:
-    is_stop.set()
-    print('Exit by Ctrl+C')
-  finally:
-    thrs.clear()
+    part = math.ceil(len(paths) / args.n_worker)
+    lock = RLock()
+    thrs = [
+      Thread(target=worker, args=(i, args, paths[part*i:part*(i+1)], result, runtime, niqe, is_stop, lock), daemon=True) 
+        for i in range(args.n_worker)
+    ]
+
+    try:
+      for thr in thrs:
+        thr.start()
+      for thr in thrs:
+        while True:
+          thr.join(timeout=5)
+          if not thr.is_alive():
+            break
+    except KeyboardInterrupt:
+      is_stop.set()
+      print('Exit by Ctrl+C')
+    finally:
+      thrs.clear()
   end_all = time()
   time_all = end_all - start_all
   print('time_all:', time_all)
@@ -264,10 +278,8 @@ if __name__ == '__main__':
   parser.add_argument('-O', '--output', type=Path, default=IMAGE_PATH,  help='output image folder')
   parser.add_argument('-R', '--report', type=Path, default=REPORT_FILE, help='report model runtime to json file')
   parser.add_argument('-L', '--limit',  type=int,  default=-1, help='limit run sample count')
-  parser.add_argument('--n_worker',     type=int,  default=1,  help='multi-thread workers')
+  parser.add_argument('--n_worker',     type=int,  default=0,  help='multi-thread workers')
   parser.add_argument('--save', action='store_true', help='save sr images')
   args = parser.parse_args()
-
-  print('TPU num:', sail.get_available_tpu_num())
 
   run(args)
