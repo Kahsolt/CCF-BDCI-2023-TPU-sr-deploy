@@ -9,7 +9,8 @@ data/
 ref/
 
 # converted model ckpts
-models/
+models/*
+!models/*.py
 
 # repo
 repo/*
