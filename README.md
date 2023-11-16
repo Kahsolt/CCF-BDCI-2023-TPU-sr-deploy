@@ -9,6 +9,8 @@
 
 ### develop
 
+> compile a nice pretrained pytorch super-resolution model to TPU-supported bmodel
+
 ⚪ use my prebuilt docker image
 
 - install [Docker](https://docs.docker.com/get-docker/)
@@ -16,6 +18,7 @@
 - run following example in your docker container
   - `bash convert_resrgan.sh` (contest demo)
   - `bash convert_mobilenet_v2.sh` (sdk v1.4 demo)
+- now you can compile your any pytorch model to bmodel use this toolchain
 
 ⚪ build by yourself
 
@@ -41,6 +44,25 @@
     - `bash convert_mobilenet_v2.sh`
     - `bash convert_resrgan.sh`
 - freeze up an image `docker commit -p -a kahsolt -m "add tpu-mlir v1.4" tpu-mlir kahsolt/tpuc_dev:latest`
+
+
+### deploy
+
+> run the compiled bmodel on real TPU device, and gather the metrics result
+
+- apply for a cloud server at [sophnet tpu-cloud](https://www.sophnet.com/)
+  - open web terminal and `cd /tmp`, remeber this is your workdir
+- setup runtime
+  - upload script [setup_sophon.sh](setup_sophon.sh)
+  - run `source setup_sophon.sh`, which activaties the envvars and clones the material repo
+  - list up TPU devices by `bm-smi`, get the driver version like `0.4.8`
+  - install the python package `sophon` with right version (find it in the repo `TPU-Coder-Cup/CCF2023/sophon-{version}-py3-none-any.whl`)
+- deploy & run the compiled bmodel
+  - upload testset `testA.zip` and unzip inplace
+  - upload your bmodel `*.bmodel`
+  - upload script `upscale_bmodel.py`
+  - run `python upscale_bmodel.py -M <name>`
+  - find the results at `out/test.json`
 
 
 #### references
