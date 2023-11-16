@@ -10,14 +10,14 @@ from PIL import Image
 from PIL.Image import Image as PILImage
 from argparse import ArgumentParser
 import warnings ; warnings.simplefilter('ignore', category=RuntimeWarning)
-from typing import List
+from typing import List, Union
 
 import numpy as np
 from numpy import ndarray
 from tqdm import tqdm
 
 BASE_PATH = Path(__file__).parent
-MODEL_FILE = BASE_PATH / 'model.bmodel'
+MODEL_FILE = BASE_PATH / 'r-esrgan4x.bmodel'
 LIB_PATH = BASE_PATH / 'TPU-Coder-Cup' / 'CCF2023'
 IN_PATH = BASE_PATH / 'test'
 OUT_PATH = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
@@ -125,9 +125,8 @@ class UpscaleModel:
     res = res.resize(self.target_tile_size)   # (800, 800) => (864, 864)
     return res
 
-  def extract_and_enhance_tiles(self, image:PILImage, upscale_ratio:float=2.0) -> PILImage:
-    if image.mode != 'RGB':
-      image = image.convert('RGB')
+  def extract_and_enhance_tiles(self, image:PILImage, upscale_ratio:float=2.0, ret_type:str='pil') -> Union[PILImage, ndarray]:
+    if image.mode != 'RGB': image = image.convert('RGB')
     # 获取图像的宽度和高度
     width, height = image.size
     self.upscale_rate = upscale_ratio
@@ -155,13 +154,20 @@ class UpscaleModel:
         img_h_tiles.append(ntile)
       img_tiles.append(img_h_tiles)
     res = imgFusion(img_list=img_tiles, overlap=int(self.padding * upscale_ratio), res_w=target_width, res_h=target_height)
-    res = Image.fromarray(np.transpose(res, (1, 2, 0)).astype(np.uint8))
-    return res
+    im = np.transpose(res, (1, 2, 0)).astype(np.uint8)
+    return im if ret_type == 'np' else Image.fromarray(im)
 
 
 def worker(thr_id:int, args, paths:List[Path], result:List[dict], runtime:List[float], niqe:List[float], is_stop:Event=None, lock:RLock=None):
-  upmodel = UpscaleModel(args.model, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=20, device_id=thr_id)
-
+  upmodel = UpscaleModel(
+    args.model, 
+    model_size=(args.model_size, args.model_size), 
+    upscale_rate=4, 
+    tile_size=(args.tile_size, args.tile_size), 
+    padding=args.padding, 
+    device_id=thr_id,
+  )
+  
   total = len(paths)
   for idx, fp in enumerate((tqdm if thr_id == 0 else list)(paths)):
     if is_stop.is_set(): return
@@ -171,7 +177,7 @@ def worker(thr_id:int, args, paths:List[Path], result:List[dict], runtime:List[f
 
     # 模型推理
     start = time()
-    res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0)
+    res = upmodel.extract_and_enhance_tiles(img, upscale_ratio=4.0, ret_type='np')
     end = time() - start
     
     if lock: lock.acquire()
@@ -181,7 +187,7 @@ def worker(thr_id:int, args, paths:List[Path], result:List[dict], runtime:List[f
     # 保存图片
     if args.save:
       fp_out = Path(args.output) / fp.name
-      res.save(fp_out)
+      Image.fromarray(res).save(fp_out)
       img = Image.open(fp_out)
     else:
       img = res
@@ -261,25 +267,36 @@ def run(args):
       'images': result,
     }]
   }
-  print('time_all:', metrics['A']['time_all'])
-  print('runtime_avg:', metrics['A']['runtime_avg'])
-  print('niqe_avg:', metrics['A']['niqe_avg'])
+  rec = metrics['A'][0]
+  print('time_all:',    rec['time_all'])
+  print('runtime_avg:', rec['runtime_avg'])
+  print('niqe_avg:',    rec['niqe_avg'])
 
   print(f'>> saving to {args.report}')
   with open(args.report, 'w', encoding='utf-8') as fh:
     json.dump(metrics, fh, indent=2, ensure_ascii=False)
 
 
-if __name__ == '__main__':
+def get_parser():
   parser = ArgumentParser()
   parser.add_argument('-D', '--device', type=int,  default=0,           help='TPU device id')
   parser.add_argument('-M', '--model',  type=Path, default=MODEL_FILE,  help='path to *.bmodel model ckpt')
+  parser.add_argument('--model_size',   type=int,  default=200)
+  parser.add_argument('--tile_size',    type=int,  default=196)
+  parser.add_argument('--padding',      type=int,  default=4)
   parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,     help='input image or folder')
   parser.add_argument('-O', '--output', type=Path, default=IMAGE_PATH,  help='output image folder')
   parser.add_argument('-R', '--report', type=Path, default=REPORT_FILE, help='report model runtime to json file')
-  parser.add_argument('-L', '--limit',  type=int,  default=-1, help='limit run sample count')
-  parser.add_argument('--n_worker',     type=int,  default=0,  help='multi-thread workers')
-  parser.add_argument('--save', action='store_true', help='save sr images')
-  args = parser.parse_args()
+  parser.add_argument('-L', '--limit',  type=int,  default=-1,          help='limit run sample count')
+  parser.add_argument('--n_worker',     type=int,  default=0,           help='multi-thread workers')
+  parser.add_argument('--save',         action='store_true',            help='save sr images')
+  return parser
 
-  run(args)
+
+def get_args(parser:ArgumentParser=None):
+  parser = parser or get_parser()
+  return parser.parse_args()
+
+
+if __name__ == '__main__':
+  run(get_args())
