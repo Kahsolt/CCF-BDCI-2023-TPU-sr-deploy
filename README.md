@@ -73,6 +73,7 @@
   - doc: [https://doc.sophgo.com/sdk-docs/v23.07.01/docs_latest_release/docs/tpu-mlir/quick_start/html/index.html](https://doc.sophgo.com/sdk-docs/v23.07.01/docs_latest_release/docs/tpu-mlir/quick_start/html/index.html)
 - sophnet tpu-cloud: [https://www.sophnet.com/](https://www.sophnet.com/)
 - contest demo repo: [https://github.com/sophgo/TPU-Coder-Cup/tree/main/CCF2023](https://github.com/sophgo/TPU-Coder-Cup/tree/main/CCF2023)
+- torchSR: [https://github.com/Coloquinte/torchSR](https://github.com/Coloquinte/torchSR)
 
 ----
 by Armit
