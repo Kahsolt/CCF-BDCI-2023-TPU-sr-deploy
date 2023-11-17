@@ -4,18 +4,28 @@
 
 ----
 
-比赛主页: [https://www.datafountain.cn/competitions/972](https://www.datafountain.cn/competitions/972)
+Contest page: [https://www.datafountain.cn/competitions/972](https://www.datafountain.cn/competitions/972)  
+Team name: Absofastlutely  
 
 
 ### benchmark
 
-ℹ Upscale `x4` on 600 images of `testA.zip`
+ℹ Upscale `x4` with `padding = 16` on images from `testA.zip`
+ℹ Test sample count is **160** for pytorch, **600** (all) for original & sail (bmodel)
+ℹ Input dtype is `FP32`; shape is `(200, 200)` for `r-esrgan`, `(192, 256)` for other models
 
 | backend | device | model | time | niqe | score |
 | :-: | :-: | :-: | :-: | :-: | :-: |
-|          |  CPU   | original |         | 4.27326 |  |
-|  pytorch |  GPU   | r-esrgan |         |         |  |
-|   sail   |  TPU   | r-esrgan |         |         |  |
+|         | CPU | original  |         | 4.27326 |  |
+| pytorch | GPU | r-esrgan  | 2.73058 | 3.93794 | 128.168529838589 |
+| pytorch | GPU | carn      | 0.96182 | 5.59615 | 246.375452070004 |
+| pytorch | GPU | carn_m    | 0.79665 | 5.75405 | 280.227360568978 |
+| pytorch | GPU | edsr      | 0.79325 | 5.49612 | 309.190130993299 |
+| pytorch | GPU | ninasr_b0 | 0.45504 | 5.47967 | 541.936112691118 |
+| pytorch | GPU | ninasr_b1 | 0.84457 | 5.33448 | 305.611128201859 |
+
+> time efficiency is much more important than quality metrics!
+> now we focus on the `ninasr_b0` model :)
 
 
 ### develop
