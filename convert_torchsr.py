@@ -3,7 +3,9 @@
 # Create Time: 2023/11/16 
 
 # this script should run in docker
-# all x4 models from https://github.com/Coloquinte/torchSR, great thanks!
+# models from https://github.com/Coloquinte/torchSR, great thanks!
+# download weights, bind input_shape and convert to script_module
+# this script does not comple ti mlir & bmodel
 
 import sys
 import os
@@ -43,34 +45,10 @@ CLASS_MAP = {
   'rcan_x4':      rcan,
 }
 
-MODEL_DEVICE = 'bm1684x'
-
-CMD_TRANSFORM_MLIR = f'''
-model_transform.py 
- --model_name NAME
- --input_shape [[1,3,192,256]] 
- --model_def "MODEL_FILE" 
- --mlir NAME.mlir
-'''.replace('\n', '').replace('  ', ' ')
-
-CMD_DEPLOY_BMODEL = f'''
-model_deploy.py 
- --mlir NAME.mlir 
- --quantize F16 
- --chip {MODEL_DEVICE}
- --model NAME.bmodel
-'''.replace('\n', '').replace('  ', ' ')
-
 
 def run(cmd:str):
   print(f'[run] {cmd}')
   os.system(cmd)
-
-def bind_args(cmd:str, name:str, model_file:str=None):
-  if model_file:
-    cmd = cmd.replace('MODEL_FILE', model_file)
-  cmd = cmd.replace('NAME', name)
-  return cmd
 
 
 if __name__ == '__main__':
@@ -94,13 +72,5 @@ if __name__ == '__main__':
       example = torch.zeros([1, 3, 192, 256])
       script_model = torch.jit.trace(model, example)
       torch.jit.save(script_model, model_file)
-
-    fn = f'{name}.mlir'
-    if not Path(fn).exists():
-      run(bind_args(CMD_TRANSFORM_MLIR, name, model_file))
-
-    fn = f'{name}.bmodel'
-    if not Path(fn).exists():
-      run(bind_args(CMD_DEPLOY_BMODEL, name))
 
     os.chdir(cwd)
