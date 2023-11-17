@@ -53,14 +53,15 @@ def fix_model_size(model_size_str:str) -> Tuple[int, int]:
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/metrics/niqe.py
 niqe_pris_params = np.load(NIQE_FILE)
-mu_pris_param    = niqe_pris_params['mu_pris_param']
-cov_pris_param   = niqe_pris_params['cov_pris_param']
-gaussian_window  = niqe_pris_params['gaussian_window']
+mu_pris_param    = niqe_pris_params['mu_pris_param']    # [1, 36]
+cov_pris_param   = niqe_pris_params['cov_pris_param']   # [36, 36]
+gaussian_window  = niqe_pris_params['gaussian_window']  # [7, 7]
 
 def get_niqe(im:ndarray) -> float:
   #assert im.dtype in [np.float32, np.float16]
   #assert im.shape[-1] == 3
   #assert 0 <= im.min() and im.max() <= 1.0
-  im = bgr2ycbcr(im, y_only=True)   # [H, W], RGB => Y
-  im_y = np.round(im * 255)         # float32 =? uint8
+  im = im[:, :, ::-1]                 # rgb2bgr, float32
+  im_y = bgr2ycbcr(im, y_only=True)   # [H, W], RGB => Y
+  im_y = np.round(im_y * 255)         # float32 => uint8 in float
   return niqe(im_y, mu_pris_param, cov_pris_param, gaussian_window)
