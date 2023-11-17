@@ -121,7 +121,7 @@ class TiledSRModel:
     # vrng, to HWC
     out = np.transpose(out, [1, 2, 0])
     # numpy & clip
-    out = out.clip(0.0, 1.0)
+    out = out.clip(0.0, 1.0).astype(np.float32)
     return out
 
 
@@ -135,7 +135,7 @@ def run(args):
   if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
   # setup model
-  model = TiledSRModel(args.model, padding=args.padding, device_id=args.device)
+  model = TiledSRModel(args.model, args.model_size, padding=args.padding, device_id=args.device)
 
   # workers & task
   start_all = time()

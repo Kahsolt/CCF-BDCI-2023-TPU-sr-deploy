@@ -58,9 +58,9 @@ cov_pris_param   = niqe_pris_params['cov_pris_param']
 gaussian_window  = niqe_pris_params['gaussian_window']
 
 def get_niqe(im:ndarray) -> float:
-  assert im.dtype == np.float32
-  assert im.shape[-1] == 3
-  assert 0 <= im.min() and im.max() <= 1.0
+  #assert im.dtype in [np.float32, np.float16]
+  #assert im.shape[-1] == 3
+  #assert 0 <= im.min() and im.max() <= 1.0
   im = bgr2ycbcr(im, y_only=True)   # [H, W], RGB => Y
   im_y = np.round(im * 255)         # float32 =? uint8
   return niqe(im_y, mu_pris_param, cov_pris_param, gaussian_window)

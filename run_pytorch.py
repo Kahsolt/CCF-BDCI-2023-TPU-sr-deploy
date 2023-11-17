@@ -109,7 +109,7 @@ class TiledSRModel:
     out = out.permute([1, 2, 0])
     # numpy & clip
     out_np: ndarray = out.cpu().numpy()
-    out_np = out_np.clip(0.0, 1.0)
+    out_np = out_np.clip(0.0, 1.0).astype(np.float32)
 
     if DEBUG_IMAGE: Image.fromarray((out_np*255).astype(np.uint8)).show()
 
@@ -126,7 +126,7 @@ def run(args):
   if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
   # setup model
-  model = TiledSRModel(args.model, padding=args.padding)
+  model = TiledSRModel(args.model, args.model_size, padding=args.padding)
 
   start_all = time()
   total = len(paths)
