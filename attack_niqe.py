@@ -6,14 +6,14 @@
 
 import random
 import matplotlib.pyplot as plt
-from scipy.optimize import minimize, Bounds
+from scipy.optimize import approx_fprime
 
 from run_utils import *
 
 IMG_FILE = IN_PATH / '0001.png'
 PATCH_SIZE = 100
 
-img = Image.open(IMG_FILE).convert()
+img = Image.open(IMG_FILE)
 w, h = img.size
 x = random.randrange(w - PATCH_SIZE)
 y = random.randrange(h - PATCH_SIZE)
@@ -32,12 +32,22 @@ niqe_scores = []
 def func(x:ndarray) -> float:
   im_x = np.asarray(x, dtype=np.float32).reshape(im_y.shape)
   niqe_score = niqe(im_x, mu_pris_param, cov_pris_param, gaussian_window)
-  print(f'>> {niqe_score}')
   niqe_scores.append(niqe_score)
   return niqe_score
 
-res = minimize(func, im_y.flatten(), method='Nelder-Mead', bounds=Bounds(0, 255), options={'disp': True, 'maxiter': 200})
-im_y_hat = np.asarray(res.x).reshape(im_y.shape)
+
+# PGD settings
+steps = 10
+eps   = 8
+alpha = 1
+
+xk = im_y.flatten()
+for _ in tqdm(range(steps)):
+  grad = approx_fprime(xk, func, epsilon=eps)
+  xk -= np.sign(grad) * alpha
+  xk = np.clip(xk, 0, 255)
+
+im_y_hat = np.asarray(xk).reshape(im_y.shape)
 
 plt.clf()
 plt.subplot(221) ; plt.title('y_ch')     ; plt.imshow(im_y)
