@@ -2,14 +2,14 @@
 # Author: Armit
 # Create Time: 2023/11/17 
 
+# dummy models testing the TPU computational capacity
+
 import os
 import torch
 import torch.nn as nn
 from torch import Tensor
 
 from run_utils import MODEL_PATH
-
-# dummy models testing the TPU computational capacity
 
 
 class EmptyModel(nn.Module):

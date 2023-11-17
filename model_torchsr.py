@@ -2,10 +2,8 @@
 # Author: Armit
 # Create Time: 2023/11/16 
 
-# this script should run in docker
-# models from https://github.com/Coloquinte/torchSR, great thanks!
+# https://github.com/Coloquinte/torchSR, great thanks!
 # download weights, bind input_shape and convert to script_module
-# this script does not comple ti mlir & bmodel
 
 import sys
 import os
@@ -13,11 +11,9 @@ from pathlib import Path
 from collections import OrderedDict
 import torch
 
-BASE_PATH = Path(__file__).parent
-DATA_PATH = BASE_PATH / 'data' / 'test'
-MODEL_PATH = BASE_PATH / 'models'
-TORCHSR_PATH = BASE_PATH / 'repo' / 'torchSR'
+from run_utils import BASE_PATH, MODEL_PATH
 
+TORCHSR_PATH = BASE_PATH / 'repo' / 'torchSR'
 assert TORCHSR_PATH.is_dir()
 sys.path.append(str(TORCHSR_PATH))
 from torchsr.models import carn, carn_m, edsr_r16f64, ninasr_b0, ninasr_b1, ninasr_b2, rcan
