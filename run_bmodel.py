@@ -8,18 +8,6 @@ sail.set_dump_io_flag(False)
 from utils import *
 
 
-# ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/fix.py
-def imgFusion(img_list, overlap, res_w, res_h):
-  pre_v_img = None
-  for vi in range(len(img_list)):
-    h_img = np.transpose(img_list[vi][0], (1,2,0))
-    for hi in range(1, len(img_list[vi])):
-      new_img = np.transpose(img_list[vi][hi], (1,2,0))
-      h_img = imgFusion2(h_img, new_img, (h_img.shape[1]+new_img.shape[1]-res_w) if (hi == len(img_list[vi])-1) else overlap, True)
-    pre_v_img = h_img if pre_v_img is None else imgFusion2(pre_v_img, h_img, (pre_v_img.shape[0]+h_img.shape[0]-res_h) if vi == len(img_list)-1 else overlap, False)
-  return np.transpose(pre_v_img, (2,0,1))
-
-
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/npuengine.py
 class EngineOV:
 
@@ -52,82 +40,89 @@ class EngineOV:
     return [output[name] for name in self.output_name]
 
 
-# ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/upscale.py
-class UpscaleModel:
+class TiledSRModel:
 
-  def __init__(self, model_fp, model_size=(200, 200), upscale_rate=4, tile_size=(196, 196), padding=4, device_id=0):
+  def __init__(self, model_fp:Path, model_size=(196, 256), padding=16, device_id=0):
+    print(f'>> load model: {model_fp.stem}')
     self.model = EngineOV(str(model_fp), device_id)
-    self.model_size = model_size
-    self.upscale_rate = upscale_rate
-    self.tile_size = tile_size
+    self.bs = 1
+    self.upscale_rate = 4.0
+    self.tile_size = model_size  # (h, w)
     self.padding = padding
 
-  def calc_tile_position(self, width, height, col, row):
-    # generate mask
-    tile_left   = col * self.tile_size[0]
-    tile_top    = row * self.tile_size[1]
-    tile_right  = (col + 1) * self.tile_size[0] + self.padding
-    tile_bottom = (row + 1) * self.tile_size[1] + self.padding
-    if tile_right > height:
-      tile_right = height
-      tile_left = height - self.tile_size[0] - self.padding * 1
-    if tile_bottom > width:
-      tile_bottom = width
-      tile_top = width - self.tile_size[1] - self.padding * 1
-    return tile_top, tile_left, tile_bottom, tile_right
+  @property
+  def tile_h(self): return self.tile_size[0]
+  @property
+  def tile_w(self): return self.tile_size[1]
 
-  def calc_upscale_tile_position(self, tile_left, tile_top, tile_right, tile_bottom):
-    return [int(e * self.upscale_rate) for e in (tile_left, tile_top, tile_right, tile_bottom)]
+  def __call__(self, im:ndarray) -> ndarray:
+    # [H, W, C=3]
+    H, W, C = im.shape
+    H_tgt, W_tgt = int(H * self.upscale_rate), int(W * self.upscale_rate)
+    # tile count along aixs
+    num_rows = math.ceil((H - self.padding) / (self.tile_h - self.padding))
+    num_cols = math.ceil((W - self.padding) / (self.tile_w - self.padding))
+    # uncrop (zero padding)
+    H_ex = num_rows * self.tile_h - ((num_rows - 1) * self.padding)
+    W_ex = num_cols * self.tile_w - ((num_cols - 1) * self.padding)
+    im_ex = np.zeros([H_ex, W_ex, C], dtype=im.dtype)
+    # relocate top-left origin
+    init_y = (H_ex - H) // 2
+    init_x = (W_ex - W) // 2
+    # paste original image in the center
+    im_ex[init_y:init_y+H, init_x:init_x+W, :] = im
 
-  def model_process(self, tile:PILImage):
-    # preprocess
-    ntile = tile.resize(self.model_size)  # (216, 216) => (200, 200)
-    ntile = np.asarray(ntile).astype(np.float32)
-    ntile = ntile / 255
-    ntile = np.transpose(ntile, (2, 0, 1))
-    ntile = ntile[np.newaxis, :, :, :]    # [B=1, C=3, H=200, W=200]
-    # model forward
-    res: ndarray = self.model([ntile])[0][0]
-    res = res.clip(0.0, 1.0)
-    # extract padding
-    res = np.transpose(res, (1, 2, 0))
-    res = res * 255
-    res = res.astype(np.uint8)
-    res = Image.fromarray(res)
-    res = res.resize(self.target_tile_size)   # (800, 800) => (864, 864)
-    return res
+    # [B=1, C=3, H_ex, W_ex]
+    X = np.expand_dims(np.transpose(im_ex, (2, 0, 1)), axis=0)
 
-  def extract_and_enhance_tiles(self, image:PILImage, upscale_ratio:float=2.0, ret_type:str='pil') -> Union[PILImage, ndarray]:
-    if image.mode != 'RGB': image = image.convert('RGB')
-    # 获取图像的宽度和高度
-    width, height = image.size
-    self.upscale_rate = upscale_ratio
-    self.target_tile_size = (int((self.tile_size[0] + self.padding * 1) * upscale_ratio), int((self.tile_size[1] + self.padding * 1) * upscale_ratio))
-    target_width, target_height = int(width * upscale_ratio), int(height * upscale_ratio)
-    # 计算瓦片的列数和行数
-    num_cols = math.ceil((width  - self.padding) / self.tile_size[0])
-    num_rows = math.ceil((height - self.padding) / self.tile_size[1])
+    # break up tiles
+    boxes_low:  List[Box] = []
+    boxes_high: List[Box] = []
+    y = 0
+    while y + self.padding < H_ex:
+      x = 0
+      while x + self.padding < W_ex:
+        boxes_low.append((
+          slice(y, y + self.tile_h), 
+          slice(x, x + self.tile_w),
+        ))
+        boxes_high.append((
+          slice(int(y * self.upscale_rate), int((y + self.tile_h) * self.upscale_rate)), 
+          slice(int(x * self.upscale_rate), int((x + self.tile_w) * self.upscale_rate)),
+        ))
+        x += self.tile_w - self.padding
+      y += self.tile_h - self.padding
+    n_tiles = len(boxes_low)
+    assert n_tiles == num_rows * num_cols
 
-    # 遍历每个瓦片的行和列索引
-    img_tiles = []
-    for row in range(num_rows):
-      img_h_tiles = []
-      for col in range(num_cols):
-        # 计算瓦片的左上角和右下角坐标
-        tile_left, tile_top, tile_right, tile_bottom = self.calc_tile_position(width, height, row, col)
-        # 裁剪瓦片
-        tile = image.crop((tile_left, tile_top, tile_right, tile_bottom))
-        # 使用超分辨率模型放大瓦片
-        upscaled_tile = self.model_process(tile)
-        # 将放大后的瓦片粘贴到输出图像上
-        # overlap
-        ntile = np.asarray(upscaled_tile).astype(np.float32)
-        ntile = np.transpose(ntile, (2, 0, 1))
-        img_h_tiles.append(ntile)
-      img_tiles.append(img_h_tiles)
-    res = imgFusion(img_list=img_tiles, overlap=int(self.padding * upscale_ratio), res_w=target_width, res_h=target_height)
-    im = np.transpose(res, (1, 2, 0)).astype(np.uint8)
-    return im if ret_type == 'np' else Image.fromarray(im)
+    # forward & sew up tiles
+    H_ex_tgt, W_ex_tgt = int(H_ex * self.upscale_rate), int(W_ex * self.upscale_rate)
+    canvas = np.zeros([C, H_ex_tgt, W_ex_tgt], dtype=X.dtype)
+    count  = np.zeros([   H_ex_tgt, W_ex_tgt], dtype=np.int32)
+    while len(boxes_low):
+      batch_low,  boxes_low  = boxes_low [:self.bs], boxes_low [self.bs:]
+      batch_high, boxes_high = boxes_high[:self.bs], boxes_high[self.bs:]
+      # [B, C, H_tile=192, W_tile=256]
+      tiles_low = [X[:, :, slice_h, slice_w] for slice_h, slice_w in batch_low]
+      XT = np.concatenate(tiles_low, axis=0)
+      # [B, C, H_tile*F=764, W_tile*F=1024]
+      tiles_high: List[ndarray] = self.model([XT])[0]
+      # paste to canvas
+      for tile, (high_h, high_w) in zip(tiles_high, batch_high):
+        count [   high_h, high_w] += 1
+        canvas[:, high_h, high_w] += tile
+
+    # handle overlap
+    out_ex = np.where(count > 1, canvas / count, canvas)
+    # crop
+    fin_y = int(init_y * self.upscale_rate)
+    fin_x = int(init_x * self.upscale_rate)
+    out = out_ex[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
+    # vrng, to HWC
+    out = np.transpose(out, [1, 2, 0])
+    # numpy & clip
+    out = out.clip(0.0, 1.0)
+    return out
 
 
 def run(args):
@@ -140,14 +135,7 @@ def run(args):
   if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
 
   # setup model
-  upmodel = UpscaleModel(
-    args.model, 
-    model_size=(args.model_size, args.model_size), 
-    upscale_rate=4, 
-    tile_size=(args.tile_size, args.tile_size), 
-    padding=args.padding, 
-    device_id=args.device,
-  )
+  model = TiledSRModel(args.model, padding=args.padding, device_id=args.device)
 
   # workers & task
   start_all = time()
@@ -161,7 +149,7 @@ def run(args):
 
     # 模型推理
     start = time()
-    im_high = upmodel.extract_and_enhance_tiles(img_low, upscale_ratio=4.0, ret_type='np')
+    im_high = model(img_low)
     end = time() - start
     runtime.append(end)
 
