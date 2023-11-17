@@ -4,23 +4,19 @@
 
 import math
 import json
-from pathlib import Path
 from PIL import Image
 from scipy.stats import mode
 from scipy.optimize import differential_evolution, shgo, dual_annealing, brute
 
 import matplotlib.pyplot as plt
 
-BASE_PATH = Path(__file__).parent
-DATA_PATH = BASE_PATH / 'data' / 'test'
-OUT_PATH = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
+from run_utils import *
 
-mean = lambda x: sum(x) / len(x)
 
 fp = OUT_PATH / 'testA_sizes.json'
 if not fp.exists():
   hs, ws = [], []
-  for img_fp in DATA_PATH.iterdir():
+  for img_fp in IN_PATH.iterdir():
     img = Image.open(img_fp)
     w, h = img.size   # NOTE: mind the order
     hs.append(h)
