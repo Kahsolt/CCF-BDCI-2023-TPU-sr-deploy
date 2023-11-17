@@ -45,7 +45,6 @@ class TiledSRModel:
   def __init__(self, model_fp:Path, model_size:Tuple[int, int], padding=16, device_id=0):
     print(f'>> load model: {model_fp.stem}')
     self.model = EngineOV(str(model_fp), device_id)
-    self.bs = 4   # NOTE: fixed wehn compile to mlir
     self.upscale_rate = 4.0
     self.tile_size = model_size  # (h, w)
     self.padding = padding
@@ -99,24 +98,18 @@ class TiledSRModel:
     H_ex_tgt, W_ex_tgt = int(H_ex * self.upscale_rate), int(W_ex * self.upscale_rate)
     canvas = np.zeros([C, H_ex_tgt, W_ex_tgt], dtype=X.dtype)
     count  = np.zeros([   H_ex_tgt, W_ex_tgt], dtype=np.int32)
-    while len(boxes_low):
-      batch_low,  boxes_low  = boxes_low [:self.bs], boxes_low [self.bs:]
-      batch_high, boxes_high = boxes_high[:self.bs], boxes_high[self.bs:]
-      # [B, C, H_tile=192, W_tile=256]
-      tiles_low = [X[:, :, slice_h, slice_w] for slice_h, slice_w in batch_low]
-      # pad example count to batch size
-      while len(tiles_low) < self.bs:
-        tiles_low.append(np.zeros_like(tiles_low[-1]))
-      XT = np.concatenate(tiles_low, axis=0)
-      # [B, C, H_tile*F=764, W_tile*F=1024]
-      tiles_high: List[ndarray] = self.model([XT])[0]
-      # unpad example count to batch size
-      if len(batch_high) < len(tiles_high):
-        tiles_high = tiles_high[:len(batch_high)]
+    for i in range(len(boxes_low)):
+      low_slices  = boxes_low [i]
+      high_slices = boxes_high[i]
+      # [B=1, C, H_tile=192, W_tile=256]
+      low_h, low_w = low_slices
+      XT = X[:, :, low_h, low_w]
+      # [B=1, C, H_tile*F=764, W_tile*F=1024]
+      YT: ndarray = self.model([XT])[0][0]
       # paste to canvas
-      for tile, (high_h, high_w) in zip(tiles_high, batch_high):
-        count [   high_h, high_w] += 1
-        canvas[:, high_h, high_w] += tile
+      high_h, high_w = high_slices
+      count [   high_h, high_w] += 1
+      canvas[:, high_h, high_w] += YT
 
     # handle overlap
     out_ex = np.where(count > 1, canvas / count, canvas)
