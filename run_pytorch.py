@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from torch.nn import Module
 
-from utils import *
+from run_utils import *
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'>> device: {device}')
@@ -165,7 +165,7 @@ def run(args):
   print('time_all:',    time_all)
   print('runtime_avg:', runtime_avg)
   print('niqe_avg:',    niqe_avg)
-  print('>> score:',    get_score(runtime_avg, niqe_avg))
+  print('>> score:',    get_score(niqe_avg, runtime_avg))
 
   metrics = {
     'A': [{

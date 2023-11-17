@@ -5,7 +5,7 @@ import sophon.sail as sail
 sail.set_print_flag(False)
 sail.set_dump_io_flag(False)
 
-from utils import *
+from run_utils import *
 
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/npuengine.py
@@ -175,7 +175,7 @@ def run(args):
   print('time_all:',    time_all)
   print('runtime_avg:', runtime_avg)
   print('niqe_avg:',    niqe_avg)
-  print('>> score:',    get_score(runtime_avg, niqe_avg))
+  print('>> score:',    get_score(niqe_avg, runtime_avg))
 
   # gather results
   metrics = {

@@ -3,7 +3,7 @@ from argparse import ArgumentParser
 
 from PIL.Image import Resampling
 
-from utils import *
+from run_utils import *
 
 RESAMPLE_METHODS = {
   'original': None,
@@ -97,7 +97,7 @@ def run(args):
   print('time_all:',    time_all)
   print('runtime_avg:', runtime_avg)
   print('niqe_avg:',    niqe_avg)
-  print('>> score:',    get_score(runtime_avg, niqe_avg))
+  print('>> score:',    get_score(niqe_avg, runtime_avg))
 
   # gather results
   if args.n_worker != 0:

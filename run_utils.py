@@ -39,7 +39,7 @@ from metrics.utils import bgr2ycbcr
 Box = Tuple[slice, slice]
 
 mean = lambda x: sum(x) / len(x) if len(x) else 0.0
-get_score = lambda niqe_score, i_time: math.sqrt(7 - niqe_score) / i_time * 200
+get_score = lambda niqe_avg, runtime_avg: math.sqrt(7 - niqe_avg) / runtime_avg * 200
 
 
 def fix_model_size(model_size_str:str) -> Tuple[int, int]:
