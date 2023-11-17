@@ -156,7 +156,7 @@ def run(args):
     img_high = None
     
     # 后处理
-    if args.post_process:
+    if args.postprocess:
       img_high = img_high or np_to_pil(im_high)
       img_high = img_high.filter(ImageFilter.DETAIL)
       im_high = pil_to_np(img_high)
@@ -208,18 +208,14 @@ def get_parser():
   parser.add_argument('--padding',      type=int,  default=16)
   parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,    help='input image or folder')
   parser.add_argument('-L', '--limit',  type=int,  default=-1,         help='limit run sample count')
-  parser.add_argument('--post_process', action='store_true',           help='apply EDGE_ENHANCE')
+  parser.add_argument('--postprocess',  action='store_true',           help='apply EDGE_ENHANCE')
   parser.add_argument('--save',         action='store_true',           help='save sr images')
   return parser
 
 
 def get_args(parser:ArgumentParser=None):
   parser = parser or get_parser()
-  return parser.parse_args()
-
-
-if __name__ == '__main__':
-  args = get_args()
+  args = parser.parse_args()
 
   fp = Path(args.model)
   if not fp.is_file():
@@ -236,4 +232,8 @@ if __name__ == '__main__':
   args.output = args.log_dp / 'test_sr'
   args.report = args.log_dp / 'test.json'
 
-  run(args)
+  return args
+
+
+if __name__ == '__main__':
+  run(get_args())

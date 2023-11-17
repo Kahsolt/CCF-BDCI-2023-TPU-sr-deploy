@@ -36,7 +36,7 @@ def worker(thr_id:int, args, paths:List[Path], result:List[dict], runtime:List[f
     with lock: runtime.append(end)
 
     # 后处理
-    if args.post_process:
+    if args.postprocess:
       img_high = img_high.filter(ImageFilter.DETAIL)
 
     # 保存图片
@@ -125,7 +125,7 @@ if __name__ == '__main__':
   parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,   help='input image or folder')
   parser.add_argument('-L', '--limit',  type=int,  default=-1,        help='limit run sample count')
   parser.add_argument('--n_worker',     type=int,  default=-1,        help='multi-thread workers')
-  parser.add_argument('--post_process', action='store_true',          help='apply EDGE_ENHANCE')
+  parser.add_argument('--postprocess',  action='store_true',          help='apply EDGE_ENHANCE')
   parser.add_argument('--save',         action='store_true',          help='save sr images')
   args = parser.parse_args()
 

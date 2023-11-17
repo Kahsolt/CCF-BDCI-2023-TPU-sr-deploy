@@ -68,7 +68,32 @@ def get_niqe(im:ndarray) -> float:
   #assert im.dtype in [np.float32, np.float16]
   #assert im.shape[-1] == 3
   #assert 0 <= im.min() and im.max() <= 1.0
-  im = im[:, :, ::-1]                 # rgb2bgr, float32
+  im = rgb2bgr(im)                    # rgb2bgr, float32
   im_y = bgr2ycbcr(im, y_only=True)   # [H, W], RGB => Y
   im_y = np.round(im_y * 255)         # float32 => uint8 in float
   return niqe(im_y, mu_pris_param, cov_pris_param, gaussian_window)
+
+def rgb2bgr(im:ndarray) -> ndarray:
+  return im[:, :, ::-1]
+
+bgr2rgb = rgb2bgr
+
+def get_y_cb_cr(im:ndarray) -> Tuple[ndarray, ndarray, ndarray]:
+  im = rgb2bgr(im)
+  ycbcr: ndarray = bgr2ycbcr(im, y_only=False)
+  return [ycbcr[:, :, i] for i in range(ycbcr.shape[-1])]
+
+# repo\ESPCN-PyTorch\imgproc.py
+def ycbcr_to_bgr(img:ndarray) -> ndarray:
+  dtype = img.dtype
+  img *= 255.
+  w = np.asarray([
+    [0.00456621, 0.00456621, 0.00456621],
+    [0.00791071, -0.00153632, 0],
+    [0, -0.00318811, 0.00625893],
+  ])
+  b = [-276.836, 135.576, -222.921]
+  img = np.matmul(img, w) * 255.0 + b
+  img /= 255.
+  img = img.astype(dtype)
+  return img

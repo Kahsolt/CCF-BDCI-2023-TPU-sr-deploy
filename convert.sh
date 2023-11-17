@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 
 if [ -z $1 ]; then
-  echo "usage: $0 <model_subfolder_name>"
+  echo "usage: $0 <model_subfolder_name> [channel_size]"
   exit -1
 fi
 
 MODEL_NAME=$1
+
+if [ -z $2 ]; then
+  C=3
+else
+  C=$2
+fi
 
 # 工作目录 (本项目挂载根目录)
 pushd /workspace/code
@@ -40,7 +46,7 @@ BMODEL_INT8_FILE=$MODEL_NAME.int8.bmodel
 if [ ! -f $MLIR_NAME ]; then
   model_transform.py \
     --model_name $MODEL_NAME \
-    --input_shape [[$B,3,$H,$W]] \
+    --input_shape [[$B,$C,$H,$W]] \
     --model_def $MODEL_PATH \
     --mlir $MLIR_NAME
 fi

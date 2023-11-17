@@ -112,6 +112,9 @@ Team name: Absofastlutely
 - contest demo repo: [https://github.com/sophgo/TPU-Coder-Cup/tree/main/CCF2023](https://github.com/sophgo/TPU-Coder-Cup/tree/main/CCF2023)
 - torchSR: [https://github.com/Coloquinte/torchSR](https://github.com/Coloquinte/torchSR)
  - NinaSR: [https://github.com/Coloquinte/torchSR/blob/main/doc/NinaSR.md](https://github.com/Coloquinte/torchSR/blob/main/doc/NinaSR.md)
+- ESPCN-PyTorch: [https://github.com/Lornatang/ESPCN-PyTorch](https://github.com/Lornatang/ESPCN-PyTorch)
+  - @Lornatang: [https://github.com/Lornatang](https://github.com/Lornatang)
+  - model weight zoo: [https://pan.baidu.com/s/1yNs4rqIb004-NKEdKBJtYg?pwd=llot](https://pan.baidu.com/s/1yNs4rqIb004-NKEdKBJtYg?pwd=llot)
 
 ----
 by Armit
