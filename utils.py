@@ -27,14 +27,31 @@ if sys.platform == 'win32':     # local (develop)
 else:                           # cloud server (deploy)
   LIB_PATH = BASE_PATH / 'TPU-Coder-Cup' / 'CCF2023'
   IN_PATH  = BASE_PATH / 'test'
+NIQE_FILE  = LIB_PATH / 'metrics' / 'niqe_pris_params.npz'
 OUT_PATH   = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
 
 # the contest scaffold
 sys.path.append(str(LIB_PATH))
-from fix import imgFusion2
-from metrics.niqe import calculate_niqe
+from fix import imgFusion, imgFusion2
+from metrics.niqe import niqe, calculate_niqe, to_y_channel
+from metrics.utils import bgr2ycbcr
 
 Box = Tuple[slice, slice]
 
 mean = lambda x: sum(x) / len(x) if len(x) else 0.0
 get_score = lambda niqe_score, i_time: math.sqrt(7 - niqe_score) / i_time * 200
+
+
+# ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/metrics/niqe.py
+niqe_pris_params = np.load(NIQE_FILE)
+mu_pris_param    = niqe_pris_params['mu_pris_param']
+cov_pris_param   = niqe_pris_params['cov_pris_param']
+gaussian_window  = niqe_pris_params['gaussian_window']
+
+def get_niqe(im:ndarray) -> float:
+  assert im.dtype == np.float32
+  assert im.shape[-1] == 3
+  assert 0 <= im.min() and im.max() <= 1.0
+  im = bgr2ycbcr(im, y_only=True)   # [H, W], RGB => Y
+  im_y = np.round(im * 255)         # float32 =? uint8
+  return niqe(im_y, mu_pris_param, cov_pris_param, gaussian_window)

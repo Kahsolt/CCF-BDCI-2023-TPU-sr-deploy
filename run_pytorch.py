@@ -150,7 +150,7 @@ def run(args):
       Image.fromarray(img).save(Path(args.output) / fp.name)
 
     # 计算niqe
-    niqe_output = calculate_niqe(im_high, 0, input_order='HWC', convert_to='y')
+    niqe_output = get_niqe(im_high)
     niqe.append(niqe_output)
 
     result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})

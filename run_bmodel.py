@@ -145,20 +145,22 @@ def run(args):
   niqe:    List[float] = []
   for idx, fp in enumerate(tqdm(paths)):
     # 加载图片
-    img_low = Image.open(fp).convert('RGB')
+    img = Image.open(fp).convert('RGB')
+    im_low = np.asarray(img, dtype=np.float32) / 255.0
 
     # 模型推理
     start = time()
-    im_high = model(img_low)
+    im_high = model(im_low)
     end = time() - start
     runtime.append(end)
 
     # 保存图片
     if args.save:
-      Image.fromarray(im_high).save(Path(args.output) / fp.name)
+      img = (np.asarray(im_high) * 255).astype(np.uint8)
+      Image.fromarray(img).save(Path(args.output) / fp.name)
 
     # 计算niqe
-    niqe_output = calculate_niqe(im_high, 0, input_order='HWC', convert_to='y')
+    niqe_output = get_niqe(im_high)
     niqe.append(niqe_output)
 
     result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})

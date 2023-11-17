@@ -7,6 +7,17 @@
 比赛主页: [https://www.datafountain.cn/competitions/972](https://www.datafountain.cn/competitions/972)
 
 
+### benchmark
+
+ℹ Upscale `x4` on 600 images of `testA.zip`
+
+| backend | device | model | time | niqe | score |
+| :-: | :-: | :-: | :-: | :-: | :-: |
+|          |  CPU   | original |         | 4.27326 |  |
+|  pytorch |  GPU   | r-esrgan |         |         |  |
+|   sail   |  TPU   | r-esrgan |         |         |  |
+
+
 ### develop
 
 > compile a nice pretrained pytorch super-resolution model to TPU-supported bmodel
