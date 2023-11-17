@@ -15,6 +15,7 @@ cd r-esrgan
 wget -nc https://github.com/sophgo/TPU-Coder-Cup/raw/main/CCF2023/models/r-esrgan4x+.pt
 
 # 将 torch.jit 模型转换为 mlir
+# NOTE: input_shape 是预先确定死的，不能改!!
 if [ ! -f r-esrgan4x.mlir ]; then
   model_transform.py \
    --model_name r-esrgan \

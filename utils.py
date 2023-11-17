@@ -42,6 +42,15 @@ mean = lambda x: sum(x) / len(x) if len(x) else 0.0
 get_score = lambda niqe_score, i_time: math.sqrt(7 - niqe_score) / i_time * 200
 
 
+def fix_model_size(model_size_str:str) -> Tuple[int, int]:
+  if not model_size_str: return (192, 256)    # the optimal tile_size
+  if ',' in model_size_str:
+    return [int(e) for e in model_size_str.split(',')]
+  else:
+    e = int(model_size_str)
+    return [e, e]
+
+
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/metrics/niqe.py
 niqe_pris_params = np.load(NIQE_FILE)
 mu_pris_param    = niqe_pris_params['mu_pris_param']

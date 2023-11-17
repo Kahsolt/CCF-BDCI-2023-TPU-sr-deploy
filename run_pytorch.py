@@ -15,7 +15,7 @@ DEBUG_IMAGE = False
 
 class TiledSRModel:
 
-  def __init__(self, model_fp:Path, model_size=(196, 256), padding=4):
+  def __init__(self, model_fp:Path, model_size:Tuple[int, int], padding=4):
     print(f'>> load model: {model_fp.stem}')
     self.model: Module = torch.load(model_fp, map_location='cpu')
     self.model = self.model.eval().to(device)
@@ -184,6 +184,7 @@ def run(args):
 if __name__ == '__main__':
   parser = ArgumentParser()
   parser.add_argument('-M', '--model',  type=Path, default='r-esrgan', help='path to *.pt model ckpt, or folder name under path models/')
+  parser.add_argument('--model_size',   type=str,                      help='model input size like 200 or 196,256')
   parser.add_argument('--padding',      type=int,  default=16)
   parser.add_argument('--batch_size',   type=int,  default=8)
   parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,    help='input image or folder')
@@ -198,6 +199,8 @@ if __name__ == '__main__':
     fps = [fp for fp in dp.iterdir() if fp.suffix == '.pt']
     assert len(fps) == 1, 'folder contains mutiplt *.pt files'
     args.model = fps[0]
+
+  args.model_size = fix_model_size(args.model_size)
 
   args.log_dp = OUT_PATH / Path(args.model).stem
   args.log_dp.mkdir(exist_ok=True)

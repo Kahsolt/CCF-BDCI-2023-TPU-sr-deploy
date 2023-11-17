@@ -42,7 +42,7 @@ class EngineOV:
 
 class TiledSRModel:
 
-  def __init__(self, model_fp:Path, model_size=(196, 256), padding=16, device_id=0):
+  def __init__(self, model_fp:Path, model_size:Tuple[int, int], padding=16, device_id=0):
     print(f'>> load model: {model_fp.stem}')
     self.model = EngineOV(str(model_fp), device_id)
     self.bs = 1
@@ -196,7 +196,7 @@ def get_parser():
   parser = ArgumentParser()
   parser.add_argument('-D', '--device', type=int,  default=0,           help='TPU device id')
   parser.add_argument('-M', '--model',  type=Path, default='r-esrgan',  help='path to *.bmodel model ckpt, , or folder name under path models/')
-  parser.add_argument('--model_size',   type=int,  default=200)
+  parser.add_argument('--model_size',   type=str,                       help='model input size like 200 or 196,256')
   parser.add_argument('--tile_size',    type=int,  default=196)
   parser.add_argument('--padding',      type=int,  default=16)
   parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,     help='input image or folder')
@@ -220,6 +220,8 @@ if __name__ == '__main__':
     fps = [fp for fp in dp.iterdir() if fp.suffix == '.bmodel']
     assert len(fps) == 1, 'folder contains mutiplt *.bmodel files'
     args.model = fps[0]
+
+  args.model_size = fix_model_size(args.model_size)
 
   args.log_dp = OUT_PATH / Path(args.model).stem
   args.log_dp.mkdir(exist_ok=True)
