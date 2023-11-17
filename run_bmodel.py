@@ -1,37 +1,11 @@
-import sys
-import os
-import glob
-import math
-import json
-from time import time
-from pathlib import Path
-from PIL import Image
-from PIL.Image import Image as PILImage
 from argparse import ArgumentParser
-import warnings ; warnings.simplefilter('ignore', category=RuntimeWarning)
-from typing import List, Union
-
-import numpy as np
-from numpy import ndarray
-from tqdm import tqdm
-
-BASE_PATH  = Path(__file__).parent
-MODEL_PATH = BASE_PATH / 'models'
-LIB_PATH   = BASE_PATH / 'TPU-Coder-Cup' / 'CCF2023'
-IN_PATH    = BASE_PATH / 'test'
-OUT_PATH   = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
 
 # TPU engine sdk
 import sophon.sail as sail
 sail.set_print_flag(False)
 sail.set_dump_io_flag(False)
-# contest scaffolds
-sys.path.append(str(LIB_PATH))
-from fix import imgFusion2
-from metrics.niqe import calculate_niqe
 
-mean = lambda x: sum(x) / len(x) if len(x) else 0.0
-get_score = lambda niqe_score, i_time: math.sqrt(7 - niqe_score) / i_time * 200
+from utils import *
 
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/fix.py

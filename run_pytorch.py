@@ -1,42 +1,18 @@
-import sys
-import os
-import glob
-import math
-import json
-from time import time
-from pathlib import Path
-from PIL import Image
 from argparse import ArgumentParser
-import warnings ; warnings.simplefilter('ignore', category=RuntimeWarning)
-from typing import List, Tuple
 
 import torch
 from torch import Tensor
 from torch.nn import Module
-import numpy as np
-from numpy import ndarray
-from tqdm import tqdm
 
-BASE_PATH   = Path(__file__).parent
-MODEL_PATH  = BASE_PATH / 'models'
-LIB_PATH    = BASE_PATH / 'repo' / 'TPU-Coder-Cup' / 'CCF2023'
-IN_PATH     = BASE_PATH / 'data' / 'test'
-OUT_PATH    = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
-
-Box = Tuple[slice, slice]
+from utils import *
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'>> device: {device}')
 
-# the contest scaffold
-sys.path.append(str(LIB_PATH))
-from metrics.niqe import calculate_niqe
-
-mean = lambda x: sum(x) / len(x) if len(x) else 0.0
-get_score = lambda niqe_score, i_time: math.sqrt(7 - niqe_score) / i_time * 200
+DEBUG_SHAPE = False
+DEBUG_IMAGE = False
 
 
-# ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/upscale.py
 class TiledSRModel:
 
   def __init__(self, model_fp:Path, model_size=(196, 256), padding=4):
@@ -56,29 +32,26 @@ class TiledSRModel:
 
   @torch.inference_mode()
   def __call__(self, im:ndarray, bs:int=4) -> ndarray:
-    DEBUG = False
-    DEBUG_IMG = False
-
     # [H, W, C=3]
     H, W, C = im.shape
     H_tgt, W_tgt = int(H * self.upscale_rate), int(W * self.upscale_rate)
-    if DEBUG: print('im.shape:', im.shape)
+    if DEBUG_SHAPE: print('im.shape:', im.shape)
     # tile count along aixs
     num_rows = math.ceil((H - self.padding) / (self.tile_h - self.padding))
     num_cols = math.ceil((W - self.padding) / (self.tile_w - self.padding))
-    if DEBUG: print(f'tiles: {num_rows} x {num_cols}')
+    if DEBUG_SHAPE: print(f'tiles: {num_rows} x {num_cols}')
     # uncrop (zero padding)
     H_ex = num_rows * self.tile_h - ((num_rows - 1) * self.padding)
     W_ex = num_cols * self.tile_w - ((num_cols - 1) * self.padding)
     im_ex = np.zeros([H_ex, W_ex, C], dtype=im.dtype)
-    if DEBUG: print('im_ex.shape:', im_ex.shape)
+    if DEBUG_SHAPE: print('im_ex.shape:', im_ex.shape)
     # relocate top-left origin
     init_y = (H_ex - H) // 2
     init_x = (W_ex - W) // 2
     # paste original image in the center
     im_ex[init_y:init_y+H, init_x:init_x+W, :] = im
 
-    if DEBUG_IMG: Image.fromarray((np.asarray(im_ex)*255).astype(np.uint8)).show()
+    if DEBUG_IMAGE: Image.fromarray((np.asarray(im_ex)*255).astype(np.uint8)).show()
 
     # [B=1, C=3, H_ex, W_ex]
     X = torch.from_numpy(np.transpose(im_ex, (2, 0, 1))).unsqueeze_(0)
@@ -103,7 +76,7 @@ class TiledSRModel:
       y += self.tile_h - self.padding
     n_tiles = len(boxes_low)
     assert n_tiles == num_rows * num_cols
-    if DEBUG: print('n_tiles:', n_tiles)
+    if DEBUG_SHAPE: print('n_tiles:', n_tiles)
 
     # forward & sew up tiles
     H_ex_tgt, W_ex_tgt = int(H_ex * self.upscale_rate), int(W_ex * self.upscale_rate)
@@ -114,7 +87,7 @@ class TiledSRModel:
       batch_high, boxes_high = boxes_high[:bs], boxes_high[bs:]
       # [B, C, H_tile=192, W_tile=256]
       tiles_low = [X[:, :, slice_h, slice_w] for slice_h, slice_w in batch_low]
-      if DEBUG: print('tile sizes:', [tuple(e.shape[2:]) for e in tiles_low])
+      if DEBUG_SHAPE: print('tile sizes:', [tuple(e.shape[2:]) for e in tiles_low])
       XT = torch.concat(tiles_low, dim=0)
       # [B, C, H_tile*F=764, W_tile*F=1024]
       tiles_high: List[Tensor] = self.model(XT)
@@ -126,7 +99,7 @@ class TiledSRModel:
     # handle overlap
     out_ex = torch.where(count > 1, canvas / count, canvas)
 
-    if DEBUG_IMG: Image.fromarray((out_ex.permute([1, 2, 0]).cpu().numpy().clip(0.0, 1.0)*255).astype(np.uint8)).show()
+    if DEBUG_IMAGE: Image.fromarray((out_ex.permute([1, 2, 0]).cpu().numpy().clip(0.0, 1.0)*255).astype(np.uint8)).show()
 
     # crop
     fin_y = int(init_y * self.upscale_rate)
@@ -138,7 +111,7 @@ class TiledSRModel:
     out_np: ndarray = out.cpu().numpy()
     out_np = out_np.clip(0.0, 1.0)
 
-    if DEBUG_IMG: Image.fromarray((out_np*255).astype(np.uint8)).show()
+    if DEBUG_IMAGE: Image.fromarray((out_np*255).astype(np.uint8)).show()
 
     return out_np
 
