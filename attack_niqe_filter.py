@@ -4,11 +4,14 @@
 
 # to understand what NIQE refers...
 
+import sys
 from PIL import ImageFilter
 
 from run_utils import *
 
 IMG_FILE = IN_PATH / '0001.png'
+if len(sys.argv) > 1:
+  IMG_FILE = Path(sys.argv[1])
 PATCH_SIZE = 100
 
 pil_to_np = lambda img: np.asarray(img, dtype=np.float32) / 255.0
