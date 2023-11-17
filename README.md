@@ -10,7 +10,7 @@ Team name: Absofastlutely
 
 ### benchmark
 
-ℹ Upscale `x4` with `padding = 16` on images from `testA.zip`
+ℹ Upscale `x4` with `padding = 16` on images from `testA.zip` (though `pad=4` is pratically enough for `r-esrgan`)
 ℹ Test sample count is **160** for pytorch, **600** (all) for original & sail (bmodel)
 ℹ Input dtype is `FP32`; shape is `(200, 200)` for `r-esrgan`, `(192, 256)` for other models
 
