@@ -45,7 +45,7 @@ class TiledSRModel:
   def __init__(self, model_fp:Path, model_size:Tuple[int, int], padding=16, device_id=0):
     print(f'>> load model: {model_fp.stem}')
     self.model = EngineOV(str(model_fp), device_id)
-    self.bs = 1
+    self.bs = 4   # NOTE: fixed wehn compile to mlir
     self.upscale_rate = 4.0
     self.tile_size = model_size  # (h, w)
     self.padding = padding
@@ -104,9 +104,15 @@ class TiledSRModel:
       batch_high, boxes_high = boxes_high[:self.bs], boxes_high[self.bs:]
       # [B, C, H_tile=192, W_tile=256]
       tiles_low = [X[:, :, slice_h, slice_w] for slice_h, slice_w in batch_low]
+      # pad example count to batch size
+      while len(tiles_low) < self.bs:
+        tiles_low.append(np.zeros_like(tiles_low[-1]))
       XT = np.concatenate(tiles_low, axis=0)
       # [B, C, H_tile*F=764, W_tile*F=1024]
       tiles_high: List[ndarray] = self.model([XT])[0]
+      # unpad example count to batch size
+      if len(batch_high) < len(tiles_high):
+        tiles_high = tiles_high[:len(batch_high)]
       # paste to canvas
       for tile, (high_h, high_w) in zip(tiles_high, batch_high):
         count [   high_h, high_w] += 1
