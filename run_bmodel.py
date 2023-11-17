@@ -152,7 +152,7 @@ def run(args):
   for idx, fp in enumerate(tqdm(paths)):
     # 加载图片
     img = Image.open(fp).convert('RGB')
-    im_low = np.asarray(img, dtype=np.float32) / 255.0
+    im_low = pil_to_np(img)
 
     # 模型推理
     start = time()
@@ -160,10 +160,18 @@ def run(args):
     end = time() - start
     runtime.append(end)
 
+    img_high = None
+    
+    # 后处理
+    if args.post_process:
+      img_high = img_high or np_to_pil(im_high)
+      img_high = img_high.filter(ImageFilter.DETAIL)
+      im_high = pil_to_np(img_high)
+
     # 保存图片
     if args.save:
-      img = (np.asarray(im_high) * 255).astype(np.uint8)
-      Image.fromarray(img).save(Path(args.output) / fp.name)
+      img_high = img_high or np_to_pil(im_high)
+      img_high.save(Path(args.output) / fp.name)
 
     # 计算niqe
     niqe_output = get_niqe(im_high)
@@ -200,14 +208,15 @@ def run(args):
 
 def get_parser():
   parser = ArgumentParser()
-  parser.add_argument('-D', '--device', type=int,  default=0,           help='TPU device id')
-  parser.add_argument('-M', '--model',  type=Path, default='r-esrgan',  help='path to *.bmodel model ckpt, , or folder name under path models/')
-  parser.add_argument('--model_size',   type=str,                       help='model input size like 200 or 196,256')
+  parser.add_argument('-D', '--device', type=int,  default=0,          help='TPU device id')
+  parser.add_argument('-M', '--model',  type=Path, default='r-esrgan', help='path to *.bmodel model ckpt, , or folder name under path models/')
+  parser.add_argument('--model_size',   type=str,                      help='model input size like 200 or 196,256')
   parser.add_argument('--tile_size',    type=int,  default=196)
   parser.add_argument('--padding',      type=int,  default=16)
-  parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,     help='input image or folder')
-  parser.add_argument('-L', '--limit',  type=int,  default=-1,          help='limit run sample count')
-  parser.add_argument('--save',         action='store_true',            help='save sr images')
+  parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,    help='input image or folder')
+  parser.add_argument('-L', '--limit',  type=int,  default=-1,         help='limit run sample count')
+  parser.add_argument('--post_process', action='store_true',           help='apply EDGE_ENHANCE')
+  parser.add_argument('--save',         action='store_true',           help='save sr images')
   return parser
 
 

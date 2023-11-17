@@ -14,8 +14,6 @@ if len(sys.argv) > 1:
   IMG_FILE = Path(sys.argv[1])
 PATCH_SIZE = 100
 
-pil_to_np = lambda img: np.asarray(img, dtype=np.float32) / 255.0
-
 
 img = Image.open(IMG_FILE)
 print('original:', get_niqe(pil_to_np(img)))

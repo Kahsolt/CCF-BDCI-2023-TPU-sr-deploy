@@ -19,7 +19,7 @@ x = random.randrange(w - PATCH_SIZE)
 y = random.randrange(h - PATCH_SIZE)
 patch = img.crop((x, y, x + PATCH_SIZE, y + PATCH_SIZE))
 print('patch.size', patch.size)
-im = np.asarray(patch, dtype=np.float32) / 255.0
+im = pil_to_np(patch)
 print('im.shape', im.shape)
 im_bgr = im[:, :, ::-1]   # RGB2BGR
 im_y = bgr2ycbcr(im_bgr, y_only=True)     # [H, W], RGB => Y

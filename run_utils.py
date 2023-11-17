@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import *
 
 from tqdm import tqdm
-from PIL import Image
+from PIL import Image, ImageFilter
 from PIL.Image import Image as PILImage
 import numpy as np
 from numpy import ndarray
@@ -40,6 +40,13 @@ Box = Tuple[slice, slice]
 
 mean = lambda x: sum(x) / len(x) if len(x) else 0.0
 get_score = lambda niqe_avg, runtime_avg: math.sqrt(7 - niqe_avg) / runtime_avg * 200
+
+
+def pil_to_np(img:PILImage) -> ndarray:
+  return np.asarray(img, dtype=np.float32) / 255.0
+
+def np_to_pil(im:ndarray) -> PILImage:
+  return Image.fromarray(np.asarray(im * 255).astype(np.uint8))
 
 
 def fix_model_size(model_size_str:str) -> Tuple[int, int]:

@@ -51,7 +51,7 @@ class TiledSRModel:
     # paste original image in the center
     im_ex[init_y:init_y+H, init_x:init_x+W, :] = im
 
-    if DEBUG_IMAGE: Image.fromarray((np.asarray(im_ex)*255).astype(np.uint8)).show()
+    if DEBUG_IMAGE: np_to_pil(im_ex).show()
 
     # [B=1, C=3, H_ex, W_ex]
     X = torch.from_numpy(np.transpose(im_ex, (2, 0, 1))).unsqueeze_(0)
@@ -136,7 +136,7 @@ def run(args):
   for idx, fp in enumerate(tqdm(paths)):
     # 加载图片
     img = Image.open(fp).convert('RGB')
-    im_low = np.asarray(img, dtype=np.float32) / 255.0
+    im_low = pil_to_np(img)
 
     # 模型推理
     start = time()
@@ -144,10 +144,18 @@ def run(args):
     end = time() - start
     runtime.append(end)
 
+    img_high = None
+
+    # 后处理
+    if args.post_process:
+      img_high = img_high or np_to_pil(im_high)
+      img_high = img_high.filter(ImageFilter.DETAIL)
+      im_high = pil_to_np(img_high)
+
     # 保存图片
     if args.save:
-      img = (np.asarray(im_high) * 255).astype(np.uint8)
-      Image.fromarray(img).save(Path(args.output) / fp.name)
+      img_high = img_high or np_to_pil(im_high)
+      img_high.save(Path(args.output) / fp.name)
 
     # 计算niqe
     niqe_output = get_niqe(im_high)
@@ -189,6 +197,7 @@ if __name__ == '__main__':
   parser.add_argument('--batch_size',   type=int,  default=8)
   parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,    help='input image or folder')
   parser.add_argument('-L', '--limit',  type=int,  default=-1,         help='limit run sample count')
+  parser.add_argument('--post_process', action='store_true',           help='apply EDGE_ENHANCE')
   parser.add_argument('--save',         action='store_true',           help='save sr images')
   args = parser.parse_args()
 
