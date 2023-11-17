@@ -10,22 +10,36 @@ Team name: Absofastlutely
 
 ### benchmark
 
+⚪ pytorch inference (GPU)
+
 ℹ Upscale `x4` with `padding = 16` on images from `testA.zip` (though `pad=4` is pratically enough for `r-esrgan`)
 ℹ Test sample count is **160** for pytorch, **600** (all) for original & sail (bmodel)
 ℹ Input dtype is `FP32`; shape is `(200, 200)` for `r-esrgan`, `(192, 256)` for other models
 
-| backend | device | model | time | niqe | score |
-| :-: | :-: | :-: | :-: | :-: | :-: |
-|         | CPU | original  |         | 4.27326 |  |
-| pytorch | GPU | r-esrgan  | 2.73058 | 3.93794 | 128.168529838589 |
-| pytorch | GPU | carn      | 0.96182 | 5.59615 | 246.375452070004 |
-| pytorch | GPU | carn_m    | 0.79665 | 5.75405 | 280.227360568978 |
-| pytorch | GPU | edsr      | 0.79325 | 5.49612 | 309.190130993299 |
-| pytorch | GPU | ninasr_b0 | 0.45504 | 5.47967 | 541.936112691118 |
-| pytorch | GPU | ninasr_b1 | 0.84457 | 5.33448 | 305.611128201859 |
+| model | time | niqe | score |
+| :-: | :-: | :-: | :-: |
+| original  |         | 4.27326 |  |
+| r-esrgan  | 2.73058 | 3.93794 | 128.168529838589 |
+| carn      | 0.96182 | 5.59615 | 246.375452070004 |
+| carn_m    | 0.79665 | 5.75405 | 280.227360568978 |
+| edsr      | 0.79325 | 5.49612 | 309.190130993299 |
+| ninasr_b0 | 0.45504 | 5.47967 | 541.936112691118 |
+| ninasr_b1 | 0.84457 | 5.33448 | 305.611128201859 |
 
 > time efficiency is much more important than quality metrics!
-> now we focus on the `ninasr_b0` model :)
+> hence we'll focus on migrating the tiny models to TPU :)
+
+⚪ dummy bmodel inference (TPU)
+
+ℹ Set `--limit 16`, the computation is not enough much to show `INT8` advantage :(
+ℹ However, it shows the basic overhead on TPU
+
+| model | dtype | time_avg |
+| :-: | :-: | :-: | :-: |
+| empty | FP32 | 0.52173 |
+| empty | INT8 | 0.52447 |
+| cheap | FP32 | 0.54948 |
+| cheap | INT8 | 0.53010 |
 
 
 ### develop

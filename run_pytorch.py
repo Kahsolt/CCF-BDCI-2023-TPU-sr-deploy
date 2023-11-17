@@ -20,7 +20,8 @@ class TiledSRModel:
     self.model: Module = torch.load(model_fp, map_location='cpu')
     self.model = self.model.eval().to(device)
     print(f'>> param_cnt: {sum([p.numel() for p in self.model.parameters() if p.requires_grad])}')
-    self.dtype = list(self.model.parameters())[0].dtype
+    try:    self.dtype = list(self.model.parameters())[0].dtype
+    except: self.dtype = torch.float32
     self.upscale_rate = 4.0
     self.tile_size = model_size  # (h, w)
     self.padding = padding

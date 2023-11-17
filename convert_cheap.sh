@@ -8,11 +8,11 @@ source setup_tpu_mlir.sh
 # 编译模型保存目录
 if [ ! -d models ]; then mkdir models; fi
 cd models
-if [ ! -d ninasr_b0_x4 ]; then
-  echo ">> please run: python convert_torchsr.py"
+if [ ! -d cheap ]; then
+  echo ">> please run: python model_cheap.py"
   exit -1
 fi
-cd ninasr_b0_x4
+cd cheap
 
 # 确定输入大小
 B=1
@@ -21,12 +21,12 @@ W=256
 
 # 文件路径
 DATA_PATH=/workspace/code/data/test
-MODEL_NAME=ninasr
-MODEL_PATH=ninasr_b0_x4.pt
-MLIR_NAME=ninasr.mlir
-BMODEL_FP32_FILE=ninasr.fp32.bmodel
-BMODEL_INT8_FILE=ninasr.int8.bmodel
-BMODEL_CALIB_FILE=ninasr.int8.cali
+MODEL_NAME=cheap
+MODEL_PATH=cheap.pt
+MLIR_NAME=cheap.mlir
+BMODEL_FP32_FILE=cheap.fp32.bmodel
+BMODEL_INT8_FILE=cheap.int8.bmodel
+BMODEL_CALIB_FILE=cheap.int8.cali
 
 # 将 torch.jit 模型转换为 mlir
 if [ ! -f $MLIR_NAME ]; then
@@ -58,7 +58,7 @@ fi
 # 将 mlir 转换成 int8 的 bmodel
 if [ ! -f $BMODEL_INT8_FILE ]; then
   model_deploy.py \
-    --mlir $MLIR_NAME \
+    --mlir $MLIR_NAME  \
     --quantize INT8 \
     --calibration_table $BMODEL_CALIB_FILE  \
     --chip bm1684x \
