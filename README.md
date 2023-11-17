@@ -97,6 +97,7 @@ Team name: Absofastlutely
 - sophnet tpu-cloud: [https://www.sophnet.com/](https://www.sophnet.com/)
 - contest demo repo: [https://github.com/sophgo/TPU-Coder-Cup/tree/main/CCF2023](https://github.com/sophgo/TPU-Coder-Cup/tree/main/CCF2023)
 - torchSR: [https://github.com/Coloquinte/torchSR](https://github.com/Coloquinte/torchSR)
+ - NinaSR: [https://github.com/Coloquinte/torchSR/blob/main/doc/NinaSR.md](https://github.com/Coloquinte/torchSR/blob/main/doc/NinaSR.md)
 
 ----
 by Armit

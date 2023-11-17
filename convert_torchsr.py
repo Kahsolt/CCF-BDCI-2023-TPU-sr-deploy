@@ -24,14 +24,14 @@ from torchsr.models import carn, carn_m, edsr_r16f64, ninasr_b0, ninasr_b1, nina
 
 # only x4 models
 MODEL_URLS = [
-  'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/carn.pt',          # 6.09 MB
-  'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/carn_m.pt',        # 1.59 MB
-  'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/edsr64_x4.pt',     # 5.8 MB
+# 'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/carn.pt',          # 6.09 MB
+# 'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/carn_m.pt',        # 1.59 MB
+# 'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/edsr64_x4.pt',     # 5.8 MB
 # 'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/edsr_x4.pt',       # 164 MB
   'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/ninasr_b0_x4.pt',  # 428 KB
-  'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/ninasr_b1_x4.pt',  # 3.97 MB
-  'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/ninasr_b2_x4.pt',  # 38.5 MB
-  'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/rcan_x4.pt',       # 59.8 MB
+# 'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/ninasr_b1_x4.pt',  # 3.97 MB
+# 'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/ninasr_b2_x4.pt',  # 38.5 MB
+# 'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/rcan_x4.pt',       # 59.8 MB
 # 'https://github.com/Coloquinte/torchSR/releases/download/v1.0.3/rdn_x4.pt',        # 85 MB
 ]
 
