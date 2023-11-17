@@ -22,6 +22,8 @@
 
 > compile a nice pretrained pytorch super-resolution model to TPU-supported bmodel
 
+⚠ the `bm1684x` device only support `fp32` & `int8` :(
+
 ⚪ use my prebuilt docker image
 
 - install [Docker](https://docs.docker.com/get-docker/)
