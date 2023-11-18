@@ -1,5 +1,3 @@
-from argparse import ArgumentParser
-
 import torch
 from torch import Tensor
 from torch.nn import Module
@@ -117,23 +115,12 @@ class TiledSRModel:
     return out_np
 
 
-def run(args):
-  # in/out paths
-  if Path(args.input).is_file():
-    paths = [Path(args.input)]
-  else:
-    paths = [Path(fp) for fp in sorted(glob.glob(os.path.join(str(args.input), '*')))]
-  if args.limit > 0: paths = paths[:args.limit]
-  if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
+def get_model(args):
+  return TiledSRModel(args.model, args.model_size, padding=args.padding)
 
-  # setup model
-  model = TiledSRModel(args.model, args.model_size, padding=args.padding)
 
-  start_all = time()
+def process_images(args, model:Callable, paths:List[Path], niqe:List[float], runtime:List[float], result:List[dict]):
   total = len(paths)
-  result:  List[dict]  = []
-  runtime: List[float] = []
-  niqe:    List[float] = []
   for idx, fp in enumerate(tqdm(paths)):
     # 加载图片
     img = Image.open(fp).convert('RGB')
@@ -167,63 +154,10 @@ def run(args):
     if (idx + 1) % 10 == 0:
       print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
 
-  end_all = time()
-  time_all = end_all - start_all
-  runtime_avg = mean(runtime)
-  niqe_avg = mean(niqe)
-  print('time_all:',    time_all)
-  print('runtime_avg:', runtime_avg)
-  print('niqe_avg:',    niqe_avg)
-  print('>> score:',    get_score(niqe_avg, runtime_avg))
-
-  metrics = {
-    'A': [{
-      'model_size': os.path.getsize(args.model), 
-      'time_all': time_all, 
-      'runtime_avg': format(runtime_avg, '.4f'),
-      'niqe_avg': format(niqe_avg, '.4f'), 
-      'images': result,
-    }]
-  }
-  print(f'>> saving to {args.report}')
-  with open(args.report, 'w', encoding='utf-8') as fh:
-    json.dump(metrics, fh, indent=2, ensure_ascii=False)
-
-
-def get_parser():
-  parser = ArgumentParser()
-  parser.add_argument('-M', '--model',  type=Path, default='r-esrgan', help='path to *.pt model ckpt, or folder name under path models/')
-  parser.add_argument('--model_size',   type=str,                      help='model input size like 200 or 196,256')
-  parser.add_argument('--padding',      type=int,  default=16)
-  parser.add_argument('--batch_size',   type=int,  default=8)
-  parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,    help='input image or folder')
-  parser.add_argument('-L', '--limit',  type=int,  default=-1,         help='limit run sample count')
-  parser.add_argument('--postprocess',  action='store_true',           help='apply EDGE_ENHANCE')
-  parser.add_argument('--save',         action='store_true',           help='save sr images')
-  return parser
-
-
-def get_args(parser:ArgumentParser=None):
-  parser = parser or get_parser()
-  args = parser.parse_args()
-
-  fp = Path(args.model)
-  if not fp.is_file():
-    dp: Path = MODEL_PATH / args.model
-    assert dp.is_dir(), 'should be a folder name under path models/'
-    fps = [fp for fp in dp.iterdir() if fp.suffix == '.pt']
-    assert len(fps) == 1, 'folder contains mutiplt *.pt files'
-    args.model = fps[0]
-
-  args.model_size = fix_model_size(args.model_size)
-
-  args.log_dp = OUT_PATH / Path(args.model).stem
-  args.log_dp.mkdir(exist_ok=True)
-  args.output = args.log_dp / 'test_sr'
-  args.report = args.log_dp / 'test.json'
-
-  return args
-
 
 if __name__ == '__main__':
-  run(get_args())
+  args = get_args()
+  args.backend = 'pytorch'
+  args = process_args(args)
+
+  run_eval(args, get_model, process_images)

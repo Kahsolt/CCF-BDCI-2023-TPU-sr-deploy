@@ -11,6 +11,7 @@ import math
 import json
 from time import time
 from pathlib import Path
+from argparse import ArgumentParser
 from typing import *
 
 from tqdm import tqdm
@@ -58,6 +59,90 @@ def fix_model_size(model_size_str:str) -> Tuple[int, int]:
     return [e, e]
 
 
+def get_parser():
+  parser = ArgumentParser()
+  parser.add_argument('-K', '--backend', default='bmodel', choices=['bmodel', 'pytorch'])
+  parser.add_argument('-D', '--device',  type=int,  default=0,          help='GPU/TPU device id')
+  parser.add_argument('-M', '--model',   type=Path, default='r-esrgan', help='path to *.bmodel model ckpt, , or folder name under path models/')
+  parser.add_argument('--model_size',    type=str,                      help='model input size like 200 or 196,256')
+  parser.add_argument('--padding',       type=int,  default=16)
+  parser.add_argument('--batch_size',    type=int,  default=8)
+  parser.add_argument('-I', '--input',   type=Path, default=IN_PATH,    help='input image or folder')
+  parser.add_argument('-L', '--limit',   type=int,  default=-1,         help='limit run sample count')
+  parser.add_argument('--postprocess',   action='store_true',           help='apply EDGE_ENHANCE')
+  parser.add_argument('--save',          action='store_true',           help='save sr images')
+  return parser
+
+def get_args(parser:ArgumentParser=None):
+  parser = parser or get_parser()
+  return parser.parse_args()
+
+def process_args(args):
+  if args.backend == 'pytorch':
+    suffix = '.pt'
+  elif args.backend == 'bmodel':
+    suffix = '.bmodel'
+
+  fp = Path(args.model)
+  if not fp.is_file():
+    dp: Path = MODEL_PATH / args.model
+    assert dp.is_dir(), 'should be a folder name under path models/'
+    fps = [fp for fp in dp.iterdir() if fp.suffix == suffix]
+    assert len(fps) == 1, f'folder contains mutiple *{suffix} files'
+    args.model = fps[0]
+
+  args.model_size = fix_model_size(args.model_size)
+
+  args.log_dp = OUT_PATH / Path(args.model).stem
+  args.log_dp.mkdir(exist_ok=True)
+  args.output = args.log_dp / 'test_sr'
+  args.report = args.log_dp / 'test.json'
+
+  return args
+
+
+def run_eval(args, get_model:Callable, process_images:Callable):
+  # in/out paths
+  if Path(args.input).is_file():
+    paths = [Path(args.input)]
+  else:
+    paths = [Path(fp) for fp in sorted(glob.glob(os.path.join(str(args.input), '*')))]
+  if args.limit > 0: paths = paths[:args.limit]
+  if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
+
+  # setup model
+  model = get_model(args)
+
+  # workers & task
+  start_all = time()
+  niqe:    List[float] = []
+  runtime: List[float] = []
+  result:  List[dict]  = []
+  process_images(args, model, paths, niqe, runtime, result)
+  end_all = time()
+  time_all = end_all - start_all
+  runtime_avg = mean(runtime)
+  niqe_avg = mean(niqe)
+  print('time_all:',    time_all)
+  print('runtime_avg:', runtime_avg)
+  print('niqe_avg:',    niqe_avg)
+  print('>> score:',    get_score(niqe_avg, runtime_avg))
+
+  # gather results
+  metrics = {
+    'A': [{
+      'model_size': os.path.getsize(args.model), 
+      'time_all': time_all, 
+      'runtime_avg': format(mean(runtime), '.4f'),
+      'niqe_avg': format(mean(niqe), '.4f'), 
+      'images': result,
+    }]
+  }
+  print(f'>> saving to {args.report}')
+  with open(args.report, 'w', encoding='utf-8') as fh:
+    json.dump(metrics, fh, indent=2, ensure_ascii=False)
+
+
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/metrics/niqe.py
 niqe_pris_params = np.load(NIQE_FILE)
 mu_pris_param    = niqe_pris_params['mu_pris_param']    # [1, 36]
@@ -70,6 +155,10 @@ def get_niqe(im:ndarray) -> float:
   #assert 0 <= im.min() and im.max() <= 1.0
   im = rgb2bgr(im)                    # rgb2bgr, float32
   im_y = bgr2ycbcr(im, y_only=True)   # [H, W], RGB => Y
+  im_y = np.round(im_y * 255)         # float32 => uint8 in float
+  return niqe(im_y, mu_pris_param, cov_pris_param, gaussian_window)
+
+def get_niqe_y(im_y:ndarray) -> float:
   im_y = np.round(im_y * 255)         # float32 => uint8 in float
   return niqe(im_y, mu_pris_param, cov_pris_param, gaussian_window)
 
