@@ -29,13 +29,25 @@ Team name: Absofastlutely
 > time efficiency is much more important than quality metrics!
 > hence we'll focus on migrating the tiny models to TPU :)
 
+⚪ bmodel inference (TPU)
+
+| model | dtype | time | niqe | score |
+| :-: | :-: | :-: | :-: | :-: |
+| ninasr   | FP32 | 1.0166 | 5.5107 | 240.0883 |
+| fsrcnn   | FP32 | 3.6149 | 4.9615 |  78.9931 |
+| espcn    | FP32 | 0.7661 | 5.0328 | 366.1582 |
+| espcn-pp | FP32 | 0.7628 | 4.7576 | 392.6231 |
+
 ⚪ dummy bmodel inference (TPU)
 
-ℹ Set `--limit 16`, the computation is not enough much to show `INT8` advantage :(
-ℹ However, it shows the basic overhead on TPU
+> Get to know the real TPU computational capacity :(
+> The theoretical score upper limit can be estimated: sqrt(7-4)/0.53\*200 ≈ 650
+> The max score for ESPCN-based models should be about: sqrt(7-4.5)/0.75\*200 ≈ 420
 
-| model | dtype | time_avg |
-| :-: | :-: | :-: | :-: |
+ℹ Set test examples `--limit 16`, the computation is not enough complex to show `INT8` advantage (?); however, it shows the basic overhead on TPU
+
+| model | dtype | time |
+| :-: | :-: | :-: |
 | empty | FP32 | 0.52173 |
 | empty | INT8 | 0.52447 |
 | cheap | FP32 | 0.54948 |
