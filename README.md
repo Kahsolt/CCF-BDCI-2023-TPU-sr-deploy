@@ -63,14 +63,13 @@ Team name: Absofastlutely
 
 ⚠ the `bm1684x` device only support `fp32` & `int8` :(
 
+#### launch the docker dev env
+
 ⚪ use my prebuilt docker image
 
 - install [Docker](https://docs.docker.com/get-docker/)
-- run `run_docker.cmd`
-- run following example in your docker container
-  - `bash convert_resrgan.sh` (contest demo)
-  - `bash convert_mobilenet_v2.sh` (sdk v1.4 demo)
-- now you can compile your any pytorch model to bmodel use this toolchain
+- run `run_docker.cmd` to start the docker conatiner
+  - now you can compile your any pytorch model to bmodel use the `tpu-mlir` toolchain
 
 ⚪ build by yourself
 
@@ -93,14 +92,19 @@ Team name: Absofastlutely
     - `ls $TPUC_ROOT/python/test`
     - `ls $TPUC_ROOT/python/samples`
   - verify by running the official demos
-    - `bash convert_mobilenet_v2.sh`
-    - `bash convert_resrgan.sh`
+    - `bash convert_mobilenet_v2.sh` (sdk v1.4 demo)
+    - `bash convert_resrgan.sh` (contest demo)
 - freeze up an image `docker commit -p -a kahsolt -m "add tpu-mlir v1.4" tpu-mlir kahsolt/tpuc_dev:latest`
+
+#### compile the target model as we submit
+
+- run `bash convert_epscn.sh` in the docker
+- you will get `models/espcn/espcn.<dtyp>.bmodel`
 
 
 ### deploy
 
-> run the compiled bmodel on real TPU device, and gather the metrics result
+> eval the compiled bmodel on real TPU device, and gather the metrics result
 
 - apply for a cloud server at [sophnet tpu-cloud](https://www.sophnet.com/)
   - open web terminal and `cd /tmp`, remeber this is your workdir
@@ -109,11 +113,11 @@ Team name: Absofastlutely
   - run `source setup_sophon.sh`, which activaties the envvars and clones the material repo
   - list up TPU devices by `bm-smi`, get the driver version like `0.4.8`
   - install the python package `sophon` with right version (find it in the repo `TPU-Coder-Cup/CCF2023/sophon-{version}-py3-none-any.whl`)
-- deploy & run the compiled bmodel
+- deploy & eval the compiled bmodel
   - upload testset `testA.zip` and unzip inplace
-  - upload your bmodel `*.bmodel`
-  - upload script `upscale_bmodel.py`
-  - run `python upscale_bmodel.py -M <name>`
+  - upload bmodel `*.bmodel`
+  - upload code `run_y_only.py`, `run_bmodel.py` and `run_utils.py`
+  - run `python run_y_only.py -M <name>`
   - find the results at `out/test.json`
 
 
