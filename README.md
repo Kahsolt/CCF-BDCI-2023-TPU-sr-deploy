@@ -83,7 +83,7 @@ Team name: Absofastlutely
 - `CD /D /path/to/this/repo`
 - `docker run --name tpu-mlir --volume="%CD%":/workspace/code --workdir /workspace/code -it -d sophgo/tpuc_dev:latest`
 - setup the docker container (run the following Linux shell commands in your container)
-  - `source setup_tpu_mlir.sh`
+  - `source env/setup_tpu_mlir.sh`
   - `echo $PATH` should contain many mlir stuff
   - now you should be able to run the mlir tools
     - `ls $TPUC_ROOT/bin`
@@ -92,14 +92,22 @@ Team name: Absofastlutely
     - `ls $TPUC_ROOT/python/test`
     - `ls $TPUC_ROOT/python/samples`
   - verify by running the official demos
+    - `cd test`
     - `bash convert_mobilenet_v2.sh` (sdk v1.4 demo)
     - `bash convert_resrgan.sh` (contest demo)
 - freeze up an image `docker commit -p -a kahsolt -m "add tpu-mlir v1.4" tpu-mlir kahsolt/tpuc_dev:latest`
 
 #### compile the target model as we submit
 
-- run `bash convert_epscn.sh` in the docker
+⚪ ESPCN
+
+- run `bash convert_espcn.sh` in the docker
 - you will get `models/espcn/espcn.<dtyp>.bmodel`
+
+⚪ NinaSR_b0
+
+- run `bash convert_ninasr.sh` in the docker
+- you will get `models/ninasr_b0_x4/ninasr_b0_x4.<dtyp>.bmodel`
 
 
 ### deploy
@@ -109,7 +117,7 @@ Team name: Absofastlutely
 - apply for a cloud server at [sophnet tpu-cloud](https://www.sophnet.com/)
   - open web terminal and `cd /tmp`, remeber this is your workdir
 - setup runtime
-  - upload script [setup_sophon.sh](setup_sophon.sh)
+  - upload script [env/setup_sophon.sh](setup_sophon.sh)
   - run `source setup_sophon.sh`, which activaties the envvars and clones the material repo
   - list up TPU devices by `bm-smi`, get the driver version like `0.4.8`
   - install the python package `sophon` with right version (find it in the repo `TPU-Coder-Cup/CCF2023/sophon-{version}-py3-none-any.whl`)
@@ -117,8 +125,10 @@ Team name: Absofastlutely
   - upload testset `testA.zip` and unzip inplace
   - upload bmodel `*.bmodel`
   - upload code `run_y_only.py`, `run_bmodel.py` and `run_utils.py`
-  - run `python run_y_only.py -M <name>`
-  - find the results at `out/test.json`
+  - run eval
+    - `python run_y_only.py -M <name.bmodel>` for ESPCN bmodels
+    - `python run_bmodel.py -M <name.bmodel>` for NinaSR_b0 bmodels
+  - find the results at `out/<name>//test.json`
 
 
 #### references
