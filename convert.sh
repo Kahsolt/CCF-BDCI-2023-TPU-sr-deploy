@@ -8,9 +8,9 @@ fi
 MODEL_NAME=$1
 
 if [ -z $2 ]; then
-  C=3
+  C=3     # RGB models
 else
-  C=$2
+  C=$2    # y_only models
 fi
 
 # 工作目录 (本项目挂载根目录)
@@ -40,6 +40,7 @@ MODEL_PATH=$MODEL_NAME.pt
 MLIR_NAME=$MODEL_NAME.mlir
 CALIB_FILE=$MODEL_NAME.cali
 BMODEL_FP32_FILE=$MODEL_NAME.fp32.bmodel
+BMODEL_FP16_FILE=$MODEL_NAME.fp16.bmodel
 BMODEL_INT8_FILE=$MODEL_NAME.int8.bmodel
 
 # 将 torch.jit 模型转换为 mlir
@@ -58,6 +59,15 @@ if [ ! -f $BMODEL_FP32_FILE ]; then
     --quantize F32 \
     --chip $DEVICE \
     --model $BMODEL_FP32_FILE
+fi
+
+# 将 mlir 转换成 fp16 的 bmodel
+if [ ! -f $BMODEL_FP16_FILE ]; then
+  model_deploy.py \
+    --mlir $MLIR_NAME \
+    --quantize F16 \
+    --chip $DEVICE \
+    --model $BMODEL_FP16_FILE
 fi
 
 # 制作校准表
