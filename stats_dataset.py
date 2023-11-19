@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 
 from run_utils import *
 
+pad_size = 0
+
 
 def gather_hws() -> Tuple[List[int], List[int]]:
   fp = OUT_PATH / 'testA_sizes.json'
@@ -58,7 +60,6 @@ def gather_hws() -> Tuple[List[int], List[int]]:
 
 def find_optimal_tile_size(hs:List[int], ws:List[int]):
   def func(x:list) -> int:
-    pad_size = 0
     tile_h, tile_w = x
     cost = 0
     for h, w in zip(hs, ws):
@@ -94,7 +95,6 @@ def find_optimal_tile_size(hs:List[int], ws:List[int]):
 
 def get_avg_tile_count(hs:List[int], ws:List[int], optimal_tile_size:Tuple[int, int]):
   optimal_tile_size = (192, 256)
-  pad_size = 0
   tile_h, tile_w = optimal_tile_size
 
   tile_cnt = []
