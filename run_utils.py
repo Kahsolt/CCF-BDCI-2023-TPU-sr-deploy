@@ -174,7 +174,10 @@ def get_y_cb_cr(im:ndarray) -> Tuple[ndarray, ndarray, ndarray]:
 
 # repo\ESPCN-PyTorch\imgproc.py
 def ycbcr_to_bgr(img:ndarray) -> ndarray:
-  dtype = img.dtype
+  #assert im.dtype in [np.float32]
+  #assert im.shape[-1] == 3
+  #assert 0 <= im.min() and im.max() <= 1.0
+
   img *= 255.
   w = np.asarray([
     [0.00456621, 0.00456621, 0.00456621],
@@ -184,5 +187,5 @@ def ycbcr_to_bgr(img:ndarray) -> ndarray:
   b = [-276.836, 135.576, -222.921]
   img = np.matmul(img, w) * 255.0 + b
   img /= 255.
-  img = img.astype(dtype)
+  img = img.clip(0.0, 1.0)
   return img
