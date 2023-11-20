@@ -35,14 +35,10 @@ W=256
 # 设备
 DEVICE=bm1684x
 # 文件路径
-DATA_PATH=/workspace/code/data/test
-MY_CALIB_SCRIPT=/workspace/code/run_calibration_y_only.py
 MODEL_PATH=$MODEL_NAME.pt
 MLIR_NAME=$MODEL_NAME.mlir
-CALIB_FILE=$MODEL_NAME.cali
 BMODEL_FP32_FILE=$MODEL_NAME.fp32.bmodel
 BMODEL_FP16_FILE=$MODEL_NAME.fp16.bmodel
-BMODEL_INT8_FILE=$MODEL_NAME.int8.bmodel
 
 # 将 torch.jit 模型转换为 mlir
 if [ ! -f $MLIR_NAME ]; then
@@ -69,35 +65,6 @@ if [ ! -f $BMODEL_FP16_FILE ]; then
     --quantize F16 \
     --chip $DEVICE \
     --model $BMODEL_FP16_FILE
-fi
-
-# 制作校准表
-if [ ! -f $CALIB_FILE ]; then
-  if [ $C -eq 3 ]; then
-    run_calibration.py \
-      $MLIR_NAME \
-      --dataset $DATA_PATH \
-      --input_num 32 \
-      -o $CALIB_FILE
-  fi
-  if [ $C -eq 1 ]; then
-    python $MY_CALIB_SCRIPT \
-      $MLIR_NAME \
-      --dataset $DATA_PATH \
-      --input_num 100 \
-      -o $CALIB_FILE
-  fi
-fi
-
-# 将 mlir 转换成 int8 的 bmodel
-if [ ! -f $BMODEL_INT8_FILE ]; then
-  model_deploy.py \
-    --mlir $MLIR_NAME  \
-    --quantize INT8 \
-    --calibration_table $CALIB_FILE  \
-    --chip $DEVICE \
-    --tolerance 0.99,0.90 \
-    --model $BMODEL_INT8_FILE
 fi
 
 # list up generated files
