@@ -10,36 +10,23 @@ Team name: Absofastlutely
 
 ### benchmark
 
-⚪ pytorch inference (GPU)
-
-ℹ Upscale `x4` with `padding = 16` on images from `testA.zip` (though `pad=4` is pratically enough for `r-esrgan`)
-ℹ Test sample count is **160** for pytorch, **600** (all) for original & sail (bmodel)
-ℹ Input dtype is `FP32`; shape is `(200, 200)` for `r-esrgan`, `(192, 256)` for other models
-
-| model | time | niqe | score |
-| :-: | :-: | :-: | :-: |
-| original  |         | 4.27326 |  |
-| r-esrgan  | 2.73058 | 3.93794 | 128.168529838589 |
-| carn      | 0.96182 | 5.59615 | 246.375452070004 |
-| carn_m    | 0.79665 | 5.75405 | 280.227360568978 |
-| edsr      | 0.79325 | 5.49612 | 309.190130993299 |
-| ninasr_b0 | 0.45504 | 5.47967 | 541.936112691118 |
-| ninasr_b1 | 0.84457 | 5.33448 | 305.611128201859 |
-
-> time efficiency is much more important than quality metrics!
-> hence we'll focus on migrating the tiny models to TPU :)
-
 ⚪ bmodel inference (TPU)
+
+ℹ Upscale `x4` with `padding = 16` on images from `testA.zip`
 
 | model | dtype | time | niqe | score |
 | :-: | :-: | :-: | :-: | :-: |
-| ninasr   | FP16 | 0.7442 | 4.8958 | 389.8195 |
-| ninasr   | FP32 | 1.0166 | 5.5107 | 240.0883 |
-| carn_m   | FP16 | 0.9991 | 5.0776 | 277.5417 |
-| carn     | FP16 | 0.9605 | 5.0115 | 293.6364 |
-| fsrcnn   | FP32 | 3.6149 | 4.9615 |  78.9931 |
-| espcn    | FP32 | 0.7661 | 5.0328 | 366.1582 |
-| espcn-pp | FP32 | 0.7628 | 4.7576 | 392.6231 |
+| original    |      |        | 4.2733 |          |
+| ninasr      | FP16 | 0.7442 | 4.8958 | 389.8195 |
+| ninasr      | FP32 | 1.0166 | 5.5107 | 240.0883 |
+| carn_m      | FP16 | 0.9991 | 5.0776 | 277.5417 |
+| carn        | FP16 | 0.9605 | 5.0115 | 293.6364 |
+| fsrcnn      | FP32 | 3.6149 | 4.9615 |  78.9931 |
+| espcn       | FP32 | 0.7661 | 5.0328 | 366.1582 |
+| espcn-pp    | FP16 | 0.6879 | 5.2197 | 387.9559 |
+| espcn-pp    | FP32 | 0.7628 | 4.7576 | 392.6231 |
+| espcn_nc-pp | FP16 | 0.5369 | 5.2365 | 494.6222 |
+| espcn_nc-pp | FP32 | 0.6301 | 5.0394 | 444.4484 |
 
 ⚪ dummy bmodel inference (TPU)
 
