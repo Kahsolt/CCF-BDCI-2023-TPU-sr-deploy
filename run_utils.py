@@ -35,7 +35,7 @@ OUT_PATH   = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
 sys.path.append(str(LIB_PATH))
 from fix import imgFusion, imgFusion2
 from metrics.niqe import niqe, calculate_niqe, to_y_channel
-from metrics.utils import bgr2ycbcr
+from metrics.utils import bgr2ycbcr, to_y_channel
 
 Box = Tuple[slice, slice]
 
@@ -152,40 +152,59 @@ gaussian_window  = niqe_pris_params['gaussian_window']  # [7, 7]
 def get_niqe(im:ndarray) -> float:
   #assert im.dtype in [np.float32, np.float16]
   #assert im.shape[-1] == 3
-  #assert 0 <= im.min() and im.max() <= 1.0
-  im = rgb2bgr(im)                    # rgb2bgr, float32
-  im_y = bgr2ycbcr(im, y_only=True)   # [H, W], RGB => Y
-  im_y = np.round(im_y * 255)         # float32 => uint8 in float
-  return niqe(im_y, mu_pris_param, cov_pris_param, gaussian_window)
+  #assert 0.0 <= im.min() and im.max() <= 1.0
+
+  im_y = rgb_to_y_cb_cr(im)[-1]   # [H, W], RGB => Y
+  return get_niqe_y(im_y)
 
 def get_niqe_y(im_y:ndarray) -> float:
   im_y = np.round(im_y * 255)         # float32 => uint8 in float
   return niqe(im_y, mu_pris_param, cov_pris_param, gaussian_window)
 
-def rgb2bgr(im:ndarray) -> ndarray:
-  return im[:, :, ::-1]
-
-bgr2rgb = rgb2bgr
-
-def get_y_cb_cr(im:ndarray) -> Tuple[ndarray, ndarray, ndarray]:
-  im = rgb2bgr(im)
-  ycbcr: ndarray = bgr2ycbcr(im, y_only=False)
+def rgb_to_y_cb_cr(im:ndarray) -> Tuple[ndarray, ndarray, ndarray]:
+  ycbcr = rgb_to_ycbcr(im)
   return [ycbcr[:, :, i] for i in range(ycbcr.shape[-1])]
 
 # repo\ESPCN-PyTorch\imgproc.py
-def ycbcr_to_bgr(img:ndarray) -> ndarray:
-  #assert im.dtype in [np.float32]
+def rgb_to_ycbcr(im:ndarray) -> ndarray:
+  #assert im.dtype in [np.float32, np.float16]
   #assert im.shape[-1] == 3
-  #assert 0 <= im.min() and im.max() <= 1.0
+  #assert 0.0 <= im.min() and im.max() <= 1.0
 
-  img *= 255.
+  w = np.asarray([
+    [65.481, -37.797, 112.0],
+    [128.553, -74.203, -93.786], 
+    [24.966, 112.0, -18.214], 
+  ], dtype=np.float32)
+  b = np.asarray([16, 128, 128], dtype=np.float32)
+  im_o = np.matmul(im, w) + b
+  return im_o / 255.0   # float32, should be in 0~1
+
+# repo\ESPCN-PyTorch\imgproc.py
+def ycbcr_to_rgb(im:ndarray) -> ndarray:
+  #assert im.dtype in [np.float32, np.float16]
+  #assert im.shape[-1] == 3
+  #assert 0.0 <= im.min() and im.max() <= 1.0
+
   w = np.asarray([
     [0.00456621, 0.00456621, 0.00456621],
-    [0.00791071, -0.00153632, 0],
-    [0, -0.00318811, 0.00625893],
-  ])
-  b = [-276.836, 135.576, -222.921]
-  img = np.matmul(img, w) * 255.0 + b
-  img /= 255.
-  img = img.clip(0.0, 1.0)
-  return img
+    [0, -0.00153632, 0.00791071],
+    [0.00625893, -0.00318811, 0],
+  ], dtype=np.float32) * 255.
+  b = np.asarray([-222.921, 135.576, -276.836], dtype=np.float32)
+  im_o = np.matmul(im, w) * 255 + b
+  return im_o / 255.0   # float32, should be in 0~1
+
+
+if __name__ == '__main__':
+  import matplotlib.pyplot as plt
+  def stats(x:ndarray, name:str): print(name, x.min(), x.max(), x.mean(), x.std())
+
+  img = Image.open(IN_PATH / '0001.png')
+  rgb = pil_to_np(img)
+  stats(rgb, 'rgb')
+  ycbcr = rgb_to_ycbcr(rgb)
+  stats(ycbcr, 'ycbcr')
+  rgb_hat = ycbcr_to_rgb(ycbcr)
+  stats(rgb_hat, 'rgb_hat')
+  print(np.mean(np.abs(rgb_hat - rgb)))

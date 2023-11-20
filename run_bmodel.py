@@ -135,10 +135,11 @@ def process_images(args, model:Callable, paths:List[Path], niqe:List[float], run
 
     # 模型推理
     start = time()
-    im_high = model(im_low)
+    im_high: ndarray = model(im_low)
     end = time() - start
     runtime.append(end)
 
+    im_high = im_high.clip(0.0, 1.0)    # vrng 0~1
     img_high = None
     
     # 后处理
