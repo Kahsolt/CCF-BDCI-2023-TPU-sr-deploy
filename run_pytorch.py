@@ -95,24 +95,21 @@ class TiledSRModel:
         count [   high_h, high_w] += 1
         canvas[:, high_h, high_w] += tile
 
-    # handle overlap
-    out_ex = torch.where(count > 1, canvas / count, canvas)
-
-    if DEBUG_IMAGE: Image.fromarray((out_ex.permute([1, 2, 0]).cpu().numpy().clip(0.0, 1.0)*255).astype(np.uint8)).show()
-
     # crop
     fin_y = int(init_y * self.upscale_rate)
     fin_x = int(init_x * self.upscale_rate)
-    out = out_ex[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
-    # vrng, to HWC
+    cvs_crop = canvas[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
+    cnt_crop = count [   fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
+    # handle overlap
+    out = torch.where(cnt_crop > 1, cvs_crop / cnt_crop, cvs_crop)
+    # to HWC
     out = out.permute([1, 2, 0])
-    # numpy & clip
-    out_np: ndarray = out.cpu().numpy()
-    out_np = out_np.clip(0.0, 1.0).astype(np.float32)
+    # numpy & dtype
+    out: ndarray = out.cpu().numpy().astype(np.float32)
 
-    if DEBUG_IMAGE: Image.fromarray((out_np*255).astype(np.uint8)).show()
+    if DEBUG_IMAGE: Image.fromarray((out.clip(0.0, 1.0)*255).astype(np.uint8)).show()
 
-    return out_np
+    return out
 
 
 def get_model(args):

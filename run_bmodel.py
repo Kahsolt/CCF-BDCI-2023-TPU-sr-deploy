@@ -5,6 +5,8 @@ sail.set_dump_io_flag(False)
 
 from run_utils import *
 
+DEBUG_TIME = False
+
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/npuengine.py
 class EngineOV:
@@ -53,6 +55,7 @@ class TiledSRModel:
   def tile_w(self): return self.tile_size[1]
 
   def __call__(self, im:ndarray) -> ndarray:
+    if DEBUG_TIME: ts_cvs = time()
     # [H, W, C=3]
     H, W, C = im.shape
     H_tgt, W_tgt = int(H * self.upscale_rate), int(W * self.upscale_rate)
@@ -71,8 +74,10 @@ class TiledSRModel:
 
     # [B=1, C=3, H_ex, W_ex]
     X = np.expand_dims(np.transpose(im_ex, (2, 0, 1)), axis=0)
+    if DEBUG_TIME: print('ts_cvs:', time() - ts_cvs)
 
     # break up tiles
+    if DEBUG_TIME: ts_box = time()
     boxes_low:  List[Box] = []
     boxes_high: List[Box] = []
     y = 0
@@ -89,10 +94,11 @@ class TiledSRModel:
         ))
         x += self.tile_w - self.padding
       y += self.tile_h - self.padding
-    n_tiles = len(boxes_low)
-    assert n_tiles == num_rows * num_cols
+    #assert len(boxes_low) == num_rows * num_cols
+    if DEBUG_TIME: print('ts_box:', time() - ts_box)
 
     # forward & sew up tiles
+    if DEBUG_TIME: ts_tiles = time()
     H_ex_tgt, W_ex_tgt = int(H_ex * self.upscale_rate), int(W_ex * self.upscale_rate)
     canvas = np.zeros([C, H_ex_tgt, W_ex_tgt], dtype=X.dtype)
     count  = np.zeros([   H_ex_tgt, W_ex_tgt], dtype=np.int32)
@@ -103,22 +109,29 @@ class TiledSRModel:
       low_h, low_w = low_slices
       XT = X[:, :, low_h, low_w]
       # [B=1, C, H_tile*F=764, W_tile*F=1024]
+      if DEBUG_TIME: ts_tile = time()
       YT: ndarray = self.model([XT])[0][0]
+      if DEBUG_TIME: print('ts_tile:', time() - ts_tile)
       # paste to canvas
       high_h, high_w = high_slices
       count [   high_h, high_w] += 1
       canvas[:, high_h, high_w] += YT
+    if DEBUG_TIME: print('ts_tiles:', time() - ts_tiles)
 
-    # handle overlap
-    out_ex = np.where(count > 1, canvas / count, canvas)
     # crop
+    if DEBUG_TIME: ts_pp = time()
     fin_y = int(init_y * self.upscale_rate)
     fin_x = int(init_x * self.upscale_rate)
-    out = out_ex[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
-    # vrng, to HWC
+    cvs_crop = canvas[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
+    cnt_crop = count [   fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
+    # handle overlap
+    out = np.where(cnt_crop > 1, cvs_crop / cnt_crop, cvs_crop)
+    # to HWC
     out = np.transpose(out, [1, 2, 0])
-    # numpy & clip
-    out = out.clip(0.0, 1.0).astype(np.float32)
+    if DEBUG_TIME:
+      ts_end = time()
+      print('ts pp:', ts_end - ts_pp)
+      print('ts all:', ts_end - ts_cvs)
     return out
 
 
