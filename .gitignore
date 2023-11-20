@@ -19,3 +19,8 @@ models/*
 # repo
 repo/*
 !repo/*.cmd
+
+# sophon sdk cpp
+lib/sophon.zip
+lib/sophon/*
+!lib/sophon/sail.py
