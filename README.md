@@ -27,6 +27,9 @@ Team name: Absofastlutely
 | espcn-pp    | FP32 | 0.7628 | 4.7576 | 392.6231 |
 | espcn_nc-pp | FP16 | 0.5369 | 5.2365 | 494.6222 |
 | espcn_nc-pp | FP32 | 0.6301 | 5.0394 | 444.4484 |
+| espcn_ex    | FP16 | 0.4264 | 5.8571 | 501.4783 |
+| espcn_ex    | FP32 | 0.6184 | 5.8532 | 346.3551 |
+| espcn_ex-pp | FP16 | 0.4206 | 5.3193 | 616.5087 |
 
 ⚪ dummy bmodel inference (TPU)
 

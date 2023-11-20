@@ -27,6 +27,17 @@ class ESPCN_nc(ESPCN):
   def _forward_impl(self, x: Tensor) -> Tensor:
     return self.sub_pixel(self.feature_maps(x))
 
+class ESPCN_ex(ESPCN):
+
+  ''' directly apply ESPCN to each RGB channel, even if it is pretrained in Y channel '''
+
+  def _forward_impl(self, x: Tensor) -> Tensor:
+    return torch.cat([
+      self.sub_pixel(self.feature_maps(x[:, 0:1, :, :])),
+      self.sub_pixel(self.feature_maps(x[:, 1:2, :, :])),
+      self.sub_pixel(self.feature_maps(x[:, 2:3, :, :])),
+    ], dim=1)
+
 
 def make_script_module(name:str):
   MODEL_SUB_PATH = MODEL_PATH / name
@@ -41,11 +52,14 @@ def make_script_module(name:str):
     # ESPCN only process the Y channel in YCbCr space
     if name == 'espcn':
       model = espcn_x4(in_channels=1, out_channels=1, channels=64)
-    elif name == 'espcn_nc':
-      model = ESPCN_nc(in_channels=1, out_channels=1, channels=64)
       example = torch.zeros([1, 1, 192, 256])
+    elif name == 'espcn_nc':
+      model = ESPCN_nc(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
+      example = torch.zeros([1, 1, 192, 256])
+    elif name == 'espcn_ex':
+      model = ESPCN_ex(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
+      example = torch.zeros([1, 3, 192, 256])
     model.load_state_dict(state_dict)
-    example = torch.zeros([1, 1, 192, 256])
     script_model = torch.jit.trace(model, example)
     torch.jit.save(script_model, f'{name}.pt')
 
@@ -55,3 +69,4 @@ def make_script_module(name:str):
 if __name__ == '__main__':
   make_script_module('espcn')
   make_script_module('espcn_nc')
+  make_script_module('espcn_ex')

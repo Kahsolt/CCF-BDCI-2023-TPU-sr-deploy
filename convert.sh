@@ -16,7 +16,7 @@ fi
 # 工作目录 (本项目挂载根目录)
 pushd /workspace/code
 # tpu_mlir sdk 环境
-source setup_tpu_mlir.sh
+source env/setup_tpu_mlir.sh
 
 # 编译模型保存目录
 if [ ! -d models ]; then mkdir models; fi
