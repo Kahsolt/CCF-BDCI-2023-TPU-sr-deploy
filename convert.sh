@@ -22,7 +22,7 @@ source env/setup_tpu_mlir.sh
 if [ ! -d models ]; then mkdir models; fi
 cd models
 if [ ! -d $MODEL_NAME ]; then
-  echo ">> model subfolder not found, should run other init script first :("
+  echo ">> model subfolder $$MODEL_NAME not found, should run other init script first :("
   exit -1
 fi
 cd $MODEL_NAME
