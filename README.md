@@ -10,34 +10,44 @@ Team name: Absofastlutely
 
 ### results
 
-ℹ Upscale `x4` on various-sized images from `testA.zip`
+ℹ Upscale `x4` on various-sized images from `testA.zip` on sophon's [bm1684x](https://www.sophon.ai/product/introduce/bm1684x.html) TPU
 
-| model | dtype | time | niqe | score | comment |
-| :-: | :-: | :-: | :-: | :-: | :-: |
-| original       |      |        | 4.2733 |           |  |
-| ninasr         | FP16 | 0.7442 | 4.8958 |  389.8195 | seams |
-| ninasr         | FP32 | 1.0166 | 5.5107 |  240.0883 | seams |
-| carn_m         | FP16 | 0.9991 | 5.0776 |  277.5417 |  |
-| carn           | FP16 | 0.9605 | 5.0115 |  293.6364 |  |
-| fsrcnn         | FP32 | 3.6149 | 4.9615 |   78.9931 | very slow |
-| espcn          | FP32 | 0.7661 | 5.0328 |  366.1582 |  |
-| espcn-pp       | FP16 | 0.6879 | 5.2197 |  387.9559 |  |
-| espcn-pp       | FP32 | 0.7628 | 4.7576 |  392.6231 |  |
-| espcn_nc-pp    | FP16 | 0.5369 | 5.2365 |  494.6222 | no clip |
-| espcn_nc-pp    | FP32 | 0.6301 | 5.0394 |  444.4484 | no clip |
-| espcn_ex       | FP16 | 0.4264 | 5.8571 |  501.4783 |  |
-| espcn_ex       | FP32 | 0.6184 | 5.8532 |  346.3551 |  |
-| espcn_ex-pp    | FP16 | 0.4206 | 5.3193 |  616.5087 |  |
-| espcn_ex_p0    | FP16 | 0.1922 | 5.7573 | 1159.8901 | pad=0, seams |
-| espcn_ex_p0-pp | FP16 | 0.1910 | 5.2661 | 1378.9572 | pad=0, seams |
-| espcn_ex_pn-pp | FP16 | 0.2301 | 5.4146 | 1094.2843 | pad=-1 |
+⚪ FP16
+
+| model | padding | filter | time | niqe | score | comment |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| original |    |        |        | 4.2733 |           |  |
+| carn_m   | 16 |        | 0.9991 | 5.0776 |  277.5417 | baseline |
+| carn     | 16 |        | 0.9605 | 5.0115 |  293.6364 | baseline |
+| ninasr   | 16 |        | 0.7442 | 4.8958 |  389.8195 | baseline |
+| espcn    | 16 | DETAIL | 0.6879 | 5.2197 |  387.9559 | y_only |
+| espcn_nc | 16 | DETAIL | 0.5369 | 5.2365 |  494.6222 | y_only |
+| espcn_nc |  0 |  EDGE  |  |  |   | y_only |
+| espcn_ex | 16 |        | 0.4264 | 5.8571 |  501.4783 |  |
+| espcn_ex | 16 | DETAIL | 0.4206 | 5.3193 |  616.5087 |  |
+| espcn_ex | -1 | DETAIL | 0.2301 | 5.4146 | 1094.2843 |  |
+| espcn_ex |  0 | DETAIL | 0.1922 | 5.7573 | 1159.8901 |  |
+| espcn_ex |  0 | DETAIL | 0.1910 | 5.2661 | 1378.9572 |  |
+| espcn_ex |  0 |  EDGE  |  |  |  |  |
+
+⚪ FP32
+
+⚠ F32 models is **much slower** than F16 ones, because `TFLOPS = 32(INT8) / 16(FP16) / 2(FP32)`
+
+| model | padding | filter | time | niqe | score | comment |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| original |    |        |        | 4.2733 |           |  |
+| fsrcnn   | 16 |        | 3.6149 | 4.9615 |   78.9931 | very slow |
+| ninasr   | 16 |        | 1.0166 | 5.5107 |  240.0883 | y_only |
+| espcn    | 16 |        | 0.7661 | 5.0328 |  366.1582 | y_only |
+| espcn    | 16 | DETAIL | 0.7628 | 4.7576 |  392.6231 | y_only |
+| espcn_nc | 16 | DETAIL | 0.6301 | 5.0394 |  444.4484 |  |
+| espcn_ex | 16 |        | 0.6184 | 5.8532 |  346.3551 |  |
 
 
 ### develop
 
 > compile a nice pretrained pytorch super-resolution model to TPU-supported bmodel
-
-⚠ the SDK suggests that `bm1684x` device only support `fp32` & `int8`, but the compiled F16 models is faster than F32 models, wtf?? :(
 
 #### launch the docker dev env
 
@@ -69,14 +79,14 @@ Team name: Absofastlutely
     - `ls $TPUC_ROOT/python/samples`
   - verify by running the official demos
     - `cd test`
-    - `bash convert_mobilenet_v2.sh` (sdk v1.4 demo)
-    - `bash convert_resrgan.sh` (contest demo)
+    - `bash env/convert_mobilenet_v2.sh` (sdk v1.4 demo)
+    - `bash env/convert_resrgan.sh` (contest demo)
 - freeze up an image `docker commit -p -a kahsolt -m "add tpu-mlir v1.4" tpu-mlir kahsolt/tpuc_dev:latest`
 
 #### compile the target model as we submit
 
-- run `bash convert_espcn.sh` in the docker
-- you will get `models/espcn*/espcn*.<dtyp>.bmodel`
+- run `python model_espcn.py` **out of the docker in Windows cmd** (if you natively use Linux, you need some modification on paths)
+- run `bash convert_espcn.sh` **in the docker**, you will get the compiled `models/espcn*/espcn*.<dtyp>.bmodel`
 
 
 ### deploy
@@ -100,6 +110,9 @@ Team name: Absofastlutely
 
 #### references
 
+- bm1684x chip
+  - page: [https://www.sophon.ai/product/introduce/bm1684x.html](https://www.sophon.ai/product/introduce/bm1684x.html)
+  - doc: [https://sophon-file.sophon.cn/sophon-prod-s3/drive/23/03/02/20/BM1684X%20Introduction%20V1.7.pdf]
 - tpu-mlir
   - site: [https://tpumlir.org/](https://tpumlir.org/)
   - repo: [https://github.com/sophgo/tpu-mlir](https://github.com/sophgo/tpu-mlir)
