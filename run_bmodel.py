@@ -5,7 +5,7 @@ sail.set_dump_io_flag(False)
 
 from run_utils import *
 
-DEBUG_TIME = False
+DEBUG_TIME = bool(os.environ.get('DEBUG_TIME', False))
 
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/npuengine.py
@@ -104,8 +104,8 @@ class TiledSRBModelTile(TiledSR):
       high_slices = boxes_high[i]
       # [B=1, C, H_tile=192, W_tile=256]
       low_h, low_w = low_slices
-      XT = X[:, :, low_h, low_w]
-      # [B=1, C, H_tile*F=764, W_tile*F=1024]
+      XT = X[:, :, low_h, low_w].copy()     # NOTE: ref will go wrong on model call
+      # [C, H_tile*F=764, W_tile*F=1024]
       if DEBUG_TIME: ts_tile = time()
       YT: ndarray = self.model([XT])[0][0]
       if DEBUG_TIME: print('ts_tile:', time() - ts_tile)
@@ -194,8 +194,8 @@ class TiledSRBModelOverlap(TiledSR):
       high_slices = boxes_high[i]
       # [B=1, C, H_tile=192, W_tile=256]
       low_h, low_w = low_slices
-      XT = X[:, :, low_h, low_w]
-      # [B=1, C, H_tile*F=764, W_tile*F=1024]
+      XT = X[:, :, low_h, low_w].copy()     # NOTE: ref will go wrong on model call
+      # [C, H_tile*F=764, W_tile*F=1024]
       if DEBUG_TIME: ts_tile = time()
       YT: ndarray = self.model([XT])[0][0]
       if DEBUG_TIME: print('ts_tile:', time() - ts_tile)
@@ -296,8 +296,8 @@ class TiledSRBModelCrop(TiledSR):
       high_slices = boxes_high[i]
       # [B=1, C, H_tile=192, W_tile=256]
       low_h, low_w = low_slices
-      XT = X[:, :, low_h, low_w]
-      # [B=1, C, H_tile*F=764, W_tile*F=1024]
+      XT = X[:, :, low_h, low_w].copy()     # NOTE: ref will go wrong on model call
+      # [C, H_tile*F=764, W_tile*F=1024]
       if DEBUG_TIME: ts_tile = time()
       YT: ndarray = self.model([XT])[0][0]
       if DEBUG_TIME: print('ts_tile:', time() - ts_tile)

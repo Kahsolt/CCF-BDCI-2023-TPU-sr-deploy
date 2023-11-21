@@ -7,8 +7,8 @@ from run_utils import *
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'>> device: {device}')
 
-DEBUG_SHAPE = False
-DEBUG_IMAGE = False
+DEBUG_SHAPE = bool(os.environ.get('DEBUG_SHAPE', False))
+DEBUG_IMAGE = bool(os.environ.get('DEBUG_IMAGE', False))
 
 
 class TiledSRPytorch(TiledSR):
