@@ -8,11 +8,9 @@ Contest page: [https://www.datafountain.cn/competitions/972](https://www.datafou
 Team name: Absofastlutely  
 
 
-### benchmark
+### results
 
-⚪ bmodel inference (TPU)
-
-ℹ Upscale `x4` with `padding = 16` on images from `testA.zip`
+ℹ Upscale `x4` on various-sized images from `testA.zip`
 
 | model | dtype | time | niqe | score |
 | :-: | :-: | :-: | :-: | :-: |
@@ -33,27 +31,12 @@ Team name: Absofastlutely
 | espcn_ex_p0    | FP16 | 0.1922 | 5.7573 | 1159.8901 |
 | espcn_ex_p0-pp | FP16 | 0.1910 | 5.2661 | 1378.9572 |
 
-⚪ dummy bmodel inference (TPU)
-
-> Get to know the real TPU computational capacity :(
-> The theoretical score upper limit can be estimated: sqrt(7-4)/0.53\*200 ≈ 650
-> The max score for ESPCN-based models should be about: sqrt(7-4.5)/0.75\*200 ≈ 420
-
-ℹ Set test examples `--limit 16`, the computation is not enough complex to show `INT8` advantage (?); however, it shows the basic overhead on TPU
-
-| model | dtype | time |
-| :-: | :-: | :-: |
-| empty | FP32 | 0.52173 |
-| empty | INT8 | 0.52447 |
-| cheap | FP32 | 0.54948 |
-| cheap | INT8 | 0.53010 |
-
 
 ### develop
 
 > compile a nice pretrained pytorch super-resolution model to TPU-supported bmodel
 
-⚠ the `bm1684x` device only support `fp32` & `int8` :(
+⚠ the SDK suggests that `bm1684x` device only support `fp32` & `int8`, but the compiled F16 models is faster than F32 models, wtf?? :(
 
 #### launch the docker dev env
 
@@ -91,15 +74,8 @@ Team name: Absofastlutely
 
 #### compile the target model as we submit
 
-⚪ ESPCN
-
 - run `bash convert_espcn.sh` in the docker
-- you will get `models/espcn/espcn.<dtyp>.bmodel`
-
-⚪ NinaSR_b0
-
-- run `bash convert_ninasr.sh` in the docker
-- you will get `models/ninasr_b0_x4/ninasr_b0_x4.<dtyp>.bmodel`
+- you will get `models/espcn*/espcn*.<dtyp>.bmodel`
 
 
 ### deploy
@@ -116,10 +92,8 @@ Team name: Absofastlutely
 - deploy & eval the compiled bmodel
   - upload testset `testA.zip` and unzip inplace
   - upload bmodel `*.bmodel`
-  - upload code `run_y_only.py`, `run_bmodel.py` and `run_utils.py`
-  - run eval
-    - `python run_y_only.py -M <name.bmodel>` for ESPCN bmodels
-    - `python run_bmodel.py -M <name.bmodel>` for NinaSR_b0 bmodels
+  - upload code `run_bmodel.py` and `run_utils.py`
+  - run eval `python run_bmodel.py -M <name.bmodel>`
   - find the results at `out/<name>//test.json`
 
 
