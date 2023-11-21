@@ -9,6 +9,7 @@ import sys
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import Tensor
 
 from run_utils import BASE_PATH, MODEL_PATH
@@ -70,8 +71,10 @@ class ESPCN_cp(ESPCN):
     ]), requires_grad=False)
     self.ycbcr2rgb.requires_grad_(False)
 
-    self.up = nn.ConvTranspose2d(1, 1, kernel_size=4, stride=4, bias=False)
-    self.up.weight.data = nn.Parameter(torch.ones_like(self.up.weight))
+    if 'nearest':
+      self.up = nn.ConvTranspose2d(1, 1, kernel_size=4, stride=4, bias=False)
+      w = torch.ones_like(self.up.weight)
+    self.up.weight.data = nn.Parameter(w, requires_grad=False)
     self.up.requires_grad_(False)
 
   def _forward_impl(self, x: Tensor) -> Tensor:
@@ -82,10 +85,12 @@ class ESPCN_cp(ESPCN):
     # up each channel
     o = torch.cat([
       self.sub_pixel(self.feature_maps(z[:, 0:1, :, :])),
-      self.sub_pixel(self.feature_maps(z[:, 1:2, :, :])),
-      self.sub_pixel(self.feature_maps(z[:, 2:3, :, :])),
-      #self.up(z[:, 1:2, :, :]),
-      #self.up(z[:, 2:3, :, :]),
+      #self.sub_pixel(self.feature_maps(z[:, 1:2, :, :])),
+      #self.sub_pixel(self.feature_maps(z[:, 2:3, :, :])),
+      self.up(z[:, 1:2, :, :]),
+      self.up(z[:, 2:3, :, :]),
+      #F.interpolate(z[:, 1:2, :, :], scale_factor=4, mode='bilinear'),
+      #F.interpolate(z[:, 2:3, :, :], scale_factor=4, mode='bilinear'),
     ], dim=1)
     # YCbCr to RGB
     o = o.permute([0, 2, 3, 1])

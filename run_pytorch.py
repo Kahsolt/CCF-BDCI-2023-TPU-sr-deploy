@@ -4,7 +4,7 @@ from torch.nn import Module
 
 from run_utils import *
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cpu'    # cpu is faster than cuda
 print(f'>> device: {device}')
 
 DEBUG_SHAPE = bool(os.environ.get('DEBUG_SHAPE', False))
