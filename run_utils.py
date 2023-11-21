@@ -104,15 +104,17 @@ def process_args(args):
 class TiledSR:
 
   def __init__(self, model_size:Tuple[int, int], padding:int=4, bs:int=1):
+    print('>> tiler:', self.__class__.__name__)
+
     self.upscale_rate = 4.0
-    self.tile_size = model_size  # (h, w)
+    self.model_size = model_size  # (h, w)
     self.padding = padding
     self.bs = bs
 
   @property
-  def tile_h(self): return self.tile_size[0]
+  def tile_h(self): return self.model_size[0]
   @property
-  def tile_w(self): return self.tile_size[1]
+  def tile_w(self): return self.model_size[1]
 
   def __call__(self, im:ndarray) -> ndarray:
     raise NotImplementedError

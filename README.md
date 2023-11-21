@@ -12,24 +12,25 @@ Team name: Absofastlutely
 
 ℹ Upscale `x4` on various-sized images from `testA.zip`
 
-| model | dtype | time | niqe | score |
-| :-: | :-: | :-: | :-: | :-: |
-| original       |      |        | 4.2733 |           |
-| ninasr         | FP16 | 0.7442 | 4.8958 |  389.8195 |
-| ninasr         | FP32 | 1.0166 | 5.5107 |  240.0883 |
-| carn_m         | FP16 | 0.9991 | 5.0776 |  277.5417 |
-| carn           | FP16 | 0.9605 | 5.0115 |  293.6364 |
-| fsrcnn         | FP32 | 3.6149 | 4.9615 |   78.9931 |
-| espcn          | FP32 | 0.7661 | 5.0328 |  366.1582 |
-| espcn-pp       | FP16 | 0.6879 | 5.2197 |  387.9559 |
-| espcn-pp       | FP32 | 0.7628 | 4.7576 |  392.6231 |
-| espcn_nc-pp    | FP16 | 0.5369 | 5.2365 |  494.6222 |
-| espcn_nc-pp    | FP32 | 0.6301 | 5.0394 |  444.4484 |
-| espcn_ex       | FP16 | 0.4264 | 5.8571 |  501.4783 |
-| espcn_ex       | FP32 | 0.6184 | 5.8532 |  346.3551 |
-| espcn_ex-pp    | FP16 | 0.4206 | 5.3193 |  616.5087 |
-| espcn_ex_p0    | FP16 | 0.1922 | 5.7573 | 1159.8901 |
-| espcn_ex_p0-pp | FP16 | 0.1910 | 5.2661 | 1378.9572 |
+| model | dtype | time | niqe | score | comment |
+| :-: | :-: | :-: | :-: | :-: | :-: |
+| original       |      |        | 4.2733 |           |  |
+| ninasr         | FP16 | 0.7442 | 4.8958 |  389.8195 | seams |
+| ninasr         | FP32 | 1.0166 | 5.5107 |  240.0883 | seams |
+| carn_m         | FP16 | 0.9991 | 5.0776 |  277.5417 |  |
+| carn           | FP16 | 0.9605 | 5.0115 |  293.6364 |  |
+| fsrcnn         | FP32 | 3.6149 | 4.9615 |   78.9931 | very slow |
+| espcn          | FP32 | 0.7661 | 5.0328 |  366.1582 |  |
+| espcn-pp       | FP16 | 0.6879 | 5.2197 |  387.9559 |  |
+| espcn-pp       | FP32 | 0.7628 | 4.7576 |  392.6231 |  |
+| espcn_nc-pp    | FP16 | 0.5369 | 5.2365 |  494.6222 | no clip |
+| espcn_nc-pp    | FP32 | 0.6301 | 5.0394 |  444.4484 | no clip |
+| espcn_ex       | FP16 | 0.4264 | 5.8571 |  501.4783 |  |
+| espcn_ex       | FP32 | 0.6184 | 5.8532 |  346.3551 |  |
+| espcn_ex-pp    | FP16 | 0.4206 | 5.3193 |  616.5087 |  |
+| espcn_ex_p0    | FP16 | 0.1922 | 5.7573 | 1159.8901 | pad=0, seams |
+| espcn_ex_p0-pp | FP16 | 0.1910 | 5.2661 | 1378.9572 | pad=0, seams |
+| espcn_ex_pn-pp | FP16 | 0.2301 | 5.4146 | 1094.2843 | pad=-1 |
 
 
 ### develop
