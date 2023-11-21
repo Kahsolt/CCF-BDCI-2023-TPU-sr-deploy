@@ -42,6 +42,13 @@ Box = Tuple[slice, slice]
 mean = lambda x: sum(x) / len(x) if len(x) else 0.0
 get_score = lambda niqe_avg, runtime_avg: math.sqrt(7 - niqe_avg) / runtime_avg * 200
 
+POSTPROCESSOR = [
+  'SHARPEN',
+  'DETAIL',
+  'EDGE_ENHANCE',
+  'EDGE_ENHANCE_MORE',
+]
+
 
 def pil_to_np(img:PILImage) -> ndarray:
   return np.asarray(img, dtype=np.float32) / 255.0
@@ -69,7 +76,7 @@ def get_parser():
   parser.add_argument('--batch_size',    type=int,  default=8)
   parser.add_argument('-I', '--input',   type=Path, default=IN_PATH,    help='input image or folder')
   parser.add_argument('-L', '--limit',   type=int,  default=-1,         help='limit run sample count')
-  parser.add_argument('--postprocess',   action='store_true',           help='apply EDGE_ENHANCE')
+  parser.add_argument('--postprocess',   choices=POSTPROCESSOR)
   parser.add_argument('--save',          action='store_true',           help='save sr images')
   return parser
 
@@ -139,7 +146,7 @@ def process_images(args, model:Callable, paths:List[Path], niqe:List[float], run
     # 后处理
     if args.postprocess:
       img_high = img_high or np_to_pil(im_high)
-      img_high = img_high.filter(ImageFilter.DETAIL)
+      img_high = img_high.filter(getattr(ImageFilter, args.postprocess))
       im_high = pil_to_np(img_high)
 
     # 保存图片

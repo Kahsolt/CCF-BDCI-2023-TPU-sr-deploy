@@ -34,7 +34,7 @@ def process_images(args, model:Callable, paths:List[Path], niqe:List[float], run
     # 后处理
     if args.postprocess:
       img_high = img_high or np_to_pil(im_high)
-      img_high = img_high.filter(ImageFilter.DETAIL)
+      img_high = img_high.filter(getattr(ImageFilter, args.postprocess))
       im_high = pil_to_np(img_high)
 
     # 保存图片
