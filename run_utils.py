@@ -172,28 +172,29 @@ def rgb_to_ycbcr(im:ndarray) -> ndarray:
   #assert 0.0 <= im.min() and im.max() <= 1.0
 
   w = np.asarray([
-    [65.481, -37.797, 112.0],
-    [128.553, -74.203, -93.786], 
-    [24.966, 112.0, -18.214], 
+    [0.25678825, -0.14822353,  0.4392157 ],
+    [0.5041294 , -0.29099217, -0.36778826],
+    [0.09790588,  0.4392157 , -0.07142746],
   ], dtype=np.float32)
-  b = np.asarray([16, 128, 128], dtype=np.float32)
-  im_o = np.matmul(im, w) + b
-  return im_o / 255.0   # float32, should be in 0~1
+  b = np.asarray([
+    [0.0627451, 0.5019608, 0.5019608],
+  ], dtype=np.float32)
+  return np.matmul(im, w) + b   # float32, should be in 0~1
 
 # repo\ESPCN-PyTorch\imgproc.py
 def ycbcr_to_rgb(im:ndarray) -> ndarray:
   #assert im.dtype in [np.float32, np.float16]
   #assert im.shape[-1] == 3
-  #assert 0.0 <= im.min() and im.max() <= 1.0
 
   w = np.asarray([
-    [0.00456621, 0.00456621, 0.00456621],
-    [0, -0.00153632, 0.00791071],
-    [0.00625893, -0.00318811, 0],
-  ], dtype=np.float32) * 255.
-  b = np.asarray([-222.921, 135.576, -276.836], dtype=np.float32)
-  im_o = np.matmul(im, w) * 255 + b
-  return im_o / 255.0   # float32, should be in 0~1
+    [1.16438355,  1.16438355, 1.16438355],
+    [0.        , -0.3917616 , 2.01723105],
+    [1.59602715, -0.81296805, 0.        ],
+  ], dtype=np.float32)
+  b = np.asarray([
+    [-0.87420005,  0.53167063, -1.0856314],
+  ], dtype=np.float32)
+  return np.matmul(im, w) + b   # float32, should be in 0~1
 
 
 if __name__ == '__main__':
@@ -207,4 +208,5 @@ if __name__ == '__main__':
   stats(ycbcr, 'ycbcr')
   rgb_hat = ycbcr_to_rgb(ycbcr)
   stats(rgb_hat, 'rgb_hat')
-  print(np.mean(np.abs(rgb_hat - rgb)))
+  print('L1:', np.mean(np.abs(rgb_hat - rgb)))
+  print('L2:', np.mean(np.abs(rgb_hat - rgb)**2))
