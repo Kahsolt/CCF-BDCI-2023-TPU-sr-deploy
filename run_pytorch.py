@@ -11,26 +11,20 @@ DEBUG_SHAPE = False
 DEBUG_IMAGE = False
 
 
-class TiledSRModel:
+class TiledSRPytorch(TiledSR):
 
-  def __init__(self, model_fp:Path, model_size:Tuple[int, int], padding=4):
+  def __init__(self, model_fp:Path, model_size:Tuple[int, int], padding:int=4, bs:int=4):
+    super().__init__(model_size, padding, bs)
+
     print(f'>> load model: {model_fp.stem}')
     self.model: Module = torch.load(model_fp, map_location='cpu')
     self.model = self.model.eval().to(device)
     print(f'>> param_cnt: {sum([p.numel() for p in self.model.parameters() if p.requires_grad])}')
     try:    self.dtype = list(self.model.parameters())[0].dtype
     except: self.dtype = torch.float32
-    self.upscale_rate = 4.0
-    self.tile_size = model_size  # (h, w)
-    self.padding = padding
-
-  @property
-  def tile_h(self): return self.tile_size[0]
-  @property
-  def tile_w(self): return self.tile_size[1]
 
   @torch.inference_mode()
-  def __call__(self, im:ndarray, bs:int=4) -> ndarray:
+  def __call__(self, im:ndarray) -> ndarray:
     # [H, W, C=3]
     H, W, C = im.shape
     H_tgt, W_tgt = int(H * self.upscale_rate), int(W * self.upscale_rate)
@@ -82,8 +76,8 @@ class TiledSRModel:
     canvas = torch.zeros([C, H_ex_tgt, W_ex_tgt], device=device, dtype=self.dtype)
     count  = torch.zeros([   H_ex_tgt, W_ex_tgt], device=device, dtype=torch.int32)
     while len(boxes_low):
-      batch_low,  boxes_low  = boxes_low [:bs], boxes_low [bs:]
-      batch_high, boxes_high = boxes_high[:bs], boxes_high[bs:]
+      batch_low,  boxes_low  = boxes_low [:self.bs], boxes_low [self.bs:]
+      batch_high, boxes_high = boxes_high[:self.bs], boxes_high[self.bs:]
       # [B, C, H_tile=192, W_tile=256]
       tiles_low = [X[:, :, slice_h, slice_w] for slice_h, slice_w in batch_low]
       if DEBUG_SHAPE: print('tile sizes:', [tuple(e.shape[2:]) for e in tiles_low])
@@ -113,44 +107,7 @@ class TiledSRModel:
 
 
 def get_model(args):
-  return TiledSRModel(args.model, args.model_size, padding=args.padding)
-
-
-def process_images(args, model:Callable, paths:List[Path], niqe:List[float], runtime:List[float], result:List[dict]):
-  total = len(paths)
-  for idx, fp in enumerate(tqdm(paths)):
-    # 加载图片
-    img = Image.open(fp).convert('RGB')
-    im_low = pil_to_np(img)
-
-    # 模型推理
-    start = time()
-    im_high: ndarray = model(im_low, bs=args.batch_size)
-    end = time() - start
-    runtime.append(end)
-
-    im_high = im_high.clip(0.0, 1.0)    # vrng 0~1
-    img_high = None
-
-    # 后处理
-    if args.postprocess:
-      img_high = img_high or np_to_pil(im_high)
-      img_high = img_high.filter(ImageFilter.DETAIL)
-      im_high = pil_to_np(img_high)
-
-    # 保存图片
-    if args.save:
-      img_high = img_high or np_to_pil(im_high)
-      img_high.save(Path(args.output) / fp.name)
-
-    # 计算niqe
-    niqe_output = get_niqe(im_high)
-    niqe.append(niqe_output)
-
-    result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
-
-    if (idx + 1) % 10 == 0:
-      print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
+  return TiledSRPytorch(args.model, args.model_size, padding=args.padding, bs=args.batch_size)
 
 
 if __name__ == '__main__':

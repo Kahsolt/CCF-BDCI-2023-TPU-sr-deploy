@@ -101,6 +101,59 @@ def process_args(args):
   return args
 
 
+class TiledSR:
+
+  def __init__(self, model_size:Tuple[int, int], padding:int=4, bs:int=1):
+    self.upscale_rate = 4.0
+    self.tile_size = model_size  # (h, w)
+    self.padding = padding
+    self.bs = bs
+
+  @property
+  def tile_h(self): return self.tile_size[0]
+  @property
+  def tile_w(self): return self.tile_size[1]
+
+  def __call__(self, im:ndarray) -> ndarray:
+    raise NotImplementedError
+
+
+def process_images(args, model:Callable, paths:List[Path], niqe:List[float], runtime:List[float], result:List[dict]):
+  total = len(paths)
+  for idx, fp in enumerate(tqdm(paths)):
+    # 加载图片
+    img = Image.open(fp).convert('RGB')
+    im_low = pil_to_np(img)
+
+    # 模型推理
+    start = time()
+    im_high: ndarray = model(im_low)
+    end = time() - start
+    runtime.append(end)
+
+    im_high = im_high.clip(0.0, 1.0)    # vrng 0~1
+    img_high = None
+
+    # 后处理
+    if args.postprocess:
+      img_high = img_high or np_to_pil(im_high)
+      img_high = img_high.filter(ImageFilter.DETAIL)
+      im_high = pil_to_np(img_high)
+
+    # 保存图片
+    if args.save:
+      img_high = img_high or np_to_pil(im_high)
+      img_high.save(Path(args.output) / fp.name)
+
+    # 计算niqe
+    niqe_output = get_niqe(im_high)
+    niqe.append(niqe_output)
+
+    result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
+
+    if (idx + 1) % 10 == 0:
+      print(f'>> [{idx+1}/{total}]: niqe {mean(niqe)}, time {mean(runtime)}')
+
 def run_eval(args, get_model:Callable, process_images:Callable):
   # in/out paths
   if Path(args.input).is_file():
