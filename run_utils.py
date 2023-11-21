@@ -216,7 +216,7 @@ def get_niqe(im:ndarray) -> float:
   #assert im.shape[-1] == 3
   #assert 0.0 <= im.min() and im.max() <= 1.0
 
-  im_y = rgb_to_y_cb_cr(im)[-1]   # [H, W], RGB => Y
+  im_y = rgb_to_y_cb_cr(im)[0]   # [H, W], RGB => Y
   return get_niqe_y(im_y)
 
 def get_niqe_y(im_y:ndarray) -> float:
