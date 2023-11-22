@@ -85,10 +85,10 @@ class ESPCN_cp(ESPCN):
     # up each channel
     o = torch.cat([
       self.sub_pixel(self.feature_maps(z[:, 0:1, :, :])),
-      #self.sub_pixel(self.feature_maps(z[:, 1:2, :, :])),
-      #self.sub_pixel(self.feature_maps(z[:, 2:3, :, :])),
-      self.up(z[:, 1:2, :, :]),
-      self.up(z[:, 2:3, :, :]),
+      self.sub_pixel(self.feature_maps(z[:, 1:2, :, :])),
+      self.sub_pixel(self.feature_maps(z[:, 2:3, :, :])),
+      #self.up(z[:, 1:2, :, :]),
+      #self.up(z[:, 2:3, :, :]),
       #F.interpolate(z[:, 1:2, :, :], scale_factor=4, mode='bilinear'),
       #F.interpolate(z[:, 2:3, :, :], scale_factor=4, mode='bilinear'),
     ], dim=1)
