@@ -22,13 +22,13 @@ Team name: Absofastlutely
 | ninasr   | 16 |        | 0.7442 | 4.8958 |  389.8195 | baseline |
 | espcn    | 16 | DETAIL | 0.6879 | 5.2197 |  387.9559 | y_only |
 | espcn_nc | 16 | DETAIL | 0.5369 | 5.2365 |  494.6222 | y_only |
-| espcn_nc |  0 |  EDGE  |  |  |   | y_only |
+| espcn_nc |  0 |  EDGE  | 0.3915 | 5.9385 |  526.3948 | y_only |
 | espcn_ex | 16 |        | 0.4264 | 5.8571 |  501.4783 |  |
 | espcn_ex | 16 | DETAIL | 0.4206 | 5.3193 |  616.5087 |  |
 | espcn_ex | -1 | DETAIL | 0.2301 | 5.4146 | 1094.2843 |  |
 | espcn_ex |  0 | DETAIL | 0.1922 | 5.7573 | 1159.8901 |  |
 | espcn_ex |  0 | DETAIL | 0.1910 | 5.2661 | 1378.9572 |  |
-| espcn_ex |  0 |  EDGE  |  |  |  |  |
+| espcn_ex |  0 |  EDGE  | 0.1924 | 4.4465 | 1661.0886 |  |
 
 ⚪ FP32
 
