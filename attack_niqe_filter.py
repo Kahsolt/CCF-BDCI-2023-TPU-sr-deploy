@@ -9,7 +9,7 @@ from PIL import ImageFilter
 
 from run_utils import *
 
-IMG_FILE = IN_PATH / '0001.png'
+IMG_FILE = TEST_IMG_FILE
 if len(sys.argv) > 1:
   IMG_FILE = Path(sys.argv[1])
 PATCH_SIZE = 100

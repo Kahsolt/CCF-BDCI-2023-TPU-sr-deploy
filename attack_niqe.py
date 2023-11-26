@@ -10,7 +10,7 @@ from scipy.optimize import approx_fprime
 
 from run_utils import *
 
-IMG_FILE = IN_PATH / '0001.png'
+IMG_FILE = TEST_IMG_FILE
 PATCH_SIZE = 100
 
 img = Image.open(IMG_FILE)

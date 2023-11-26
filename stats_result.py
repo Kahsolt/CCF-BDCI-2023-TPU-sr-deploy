@@ -13,7 +13,10 @@ from run_utils import *
 def run(args):
   with open(args.fp, 'r', encoding='utf-8') as fh:
     data = json.load(fh)
-  images = data['A'][0]['images']
+  if 'A' in data:
+    images = data['A'][0]['images']
+  else:
+    images = data['B'][0]['images']
 
   times, niqes = [], []
   for img in images:
@@ -32,7 +35,7 @@ def run(args):
 
 if __name__ == '__main__':
   parser = ArgumentParser()
-  parser.add_argument('--fp', required=True, help='path to *.json file')
+  parser.add_argument('fp', help='path to *.json file')
   args = parser.parse_args()
   
   run(args)

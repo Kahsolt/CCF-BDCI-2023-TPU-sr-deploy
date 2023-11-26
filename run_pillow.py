@@ -56,18 +56,7 @@ def worker(thr_id:int, args, paths:List[Path], result:List[dict], runtime:List[f
 
 def run(args):
   # in/out paths
-  if Path(args.input).is_file():
-    paths = [Path(args.input)]
-  else:
-    paths = [Path(fp) for fp in sorted(glob.glob(os.path.join(str(args.input), '*')))]
-  if args.limit > 0: paths = paths[:args.limit]
-  if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
-
-  if args.n_worker <= 0:
-    cpu_num = os.cpu_count()
-    if args.n_worker < 0: args.n_worker = cpu_num
-    print('>> CPU num:', cpu_num)
-    print('>> n_worker:', args.n_worker)
+  paths = fix_input_output_paths(args)
 
   # workers & task
   lock = RLock()
@@ -75,7 +64,6 @@ def run(args):
   result:  List[dict]  = []
   runtime: List[float] = []
   niqe:    List[float] = []
-
   start_all = time()
   thrs = [
     Thread(target=worker, args=(i, args, paths[part*i:part*(i+1)], result, runtime, niqe, lock), daemon=True) 
@@ -97,16 +85,17 @@ def run(args):
   time_all = end_all - start_all
   runtime_avg = mean(runtime)
   niqe_avg = mean(niqe)
-  print('time_all:',    time_all)
+  print('time_all:', time_all)
   print('runtime_avg:', runtime_avg)
-  print('niqe_avg:',    niqe_avg)
-  print('>> score:',    get_score(niqe_avg, runtime_avg))
+  print('niqe_avg:', niqe_avg)
+  print('>> score:', get_score(niqe_avg, runtime_avg))
 
   # gather results
   if args.n_worker != 0:
     result.sort(key=(lambda e: e['img_name']))    # re-order
+  ranklist = 'A' if args.dataset == 'test' else 'B'
   metrics = {
-    'A': [{
+    ranklist: [{
       'method': args.method, 
       'time_all': time_all, 
       'runtime_avg': format(runtime_avg, '.4f'),
@@ -121,16 +110,23 @@ def run(args):
 
 if __name__ == '__main__':
   parser = ArgumentParser()
-  parser.add_argument('-M', '--method', type=str,  default='lanczos', choices=RESAMPLE_METHODS.keys())
-  parser.add_argument('-I', '--input',  type=Path, default=IN_PATH,   help='input image or folder')
-  parser.add_argument('-L', '--limit',  type=int,  default=-1,        help='limit run sample count')
-  parser.add_argument('--n_worker',     type=int,  default=-1,        help='multi-thread workers')
-  parser.add_argument('--postprocess',  choices=POSTPROCESSOR)
-  parser.add_argument('--save',         action='store_true',          help='save sr images')
+  parser.add_argument('-M', '--method',  type=str,  default='lanczos', choices=RESAMPLE_METHODS.keys())
+  parser.add_argument('-D', '--dataset', type=str,  default='val',     choices=DATASETS)
+  parser.add_argument('-L', '--limit',   type=int,  default=-1,        help='limit dataset run sample count')
+  parser.add_argument('--n_worker',      type=int,  default=-1,        help='multi-thread workers')
+  parser.add_argument('-pp', '--postprocess', choices=POSTPROCESSOR)
+  parser.add_argument('--save',          action='store_true',          help='save sr images')
   args = parser.parse_args()
 
-  args.log_dp = OUT_PATH / Path(args.method).stem
-  args.log_dp.mkdir(exist_ok=True)
+  args.n_worker = min(args.n_worker, args.limit)
+  if args.n_worker <= 0:
+    cpu_num = os.cpu_count()
+    args.n_worker = min(args.n_worker, cpu_num)
+    print('>> CPU num:', cpu_num)
+    print('>> n_worker:', args.n_worker)
+  
+  args.log_dp: Path = OUT_PATH / args.dataset / Path(args.method).stem
+  args.log_dp.mkdir(parents=True, exist_ok=True)
   args.output = args.log_dp / 'test_sr'
   args.report = args.log_dp / 'test.json'
 

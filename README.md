@@ -115,6 +115,7 @@ Team name: Absofastlutely
 - bm1684x chip
   - page: [https://www.sophon.ai/product/introduce/bm1684x.html](https://www.sophon.ai/product/introduce/bm1684x.html)
   - doc: [https://sophon-file.sophon.cn/sophon-prod-s3/drive/23/03/02/20/BM1684X%20Introduction%20V1.7.pdf]
+- bmcv: [https://doc.sophgo.com/docs/3.0.0/docs_latest_release/bmcv/html/index.html](https://doc.sophgo.com/docs/3.0.0/docs_latest_release/bmcv/html/index.html)
 - tpu-mlir
   - site: [https://tpumlir.org/](https://tpumlir.org/)
   - repo: [https://github.com/sophgo/tpu-mlir](https://github.com/sophgo/tpu-mlir)

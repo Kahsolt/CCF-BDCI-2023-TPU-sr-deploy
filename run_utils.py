@@ -20,16 +20,15 @@ from PIL.Image import Image as PILImage
 import numpy as np
 from numpy import ndarray
 
-BASE_PATH  = Path(__file__).parent
+BASE_PATH = Path(__file__).parent
 MODEL_PATH = BASE_PATH / 'models'
-if sys.platform == 'win32':     # local (develop)
-  LIB_PATH = BASE_PATH / 'repo' / 'TPU-Coder-Cup' / 'CCF2023'
-  IN_PATH  = BASE_PATH / 'data' / 'test'
-else:                           # cloud server (deploy)
-  LIB_PATH = BASE_PATH / 'TPU-Coder-Cup' / 'CCF2023'
-  IN_PATH  = BASE_PATH / 'test'
-NIQE_FILE  = LIB_PATH / 'metrics' / 'niqe_pris_params.npz'
-OUT_PATH   = BASE_PATH / 'out' ; OUT_PATH.mkdir(exist_ok=True)
+LIB_PATH = BASE_PATH / 'repo' / 'TPU-Coder-Cup' / 'CCF2023'                     # local (develop)
+if not LIB_PATH.exists(): LIB_PATH = BASE_PATH / 'TPU-Coder-Cup' / 'CCF2023'    # cloud server (deploy)
+IN_PATH  = BASE_PATH / 'data'
+if not IN_PATH.exists(): IN_PATH  = BASE_PATH
+TEST_IMG_FILE = IN_PATH / 'test' / '0001.png'
+NIQE_FILE = LIB_PATH / 'metrics' / 'niqe_pris_params.npz'
+OUT_PATH = BASE_PATH / 'out' ; OUT_PATH.mkdir( exist_ok=True)
 
 # the contest scaffold
 sys.path.append(str(LIB_PATH))
@@ -40,7 +39,15 @@ from metrics.utils import bgr2ycbcr, to_y_channel
 Box = Tuple[slice, slice]
 
 mean = lambda x: sum(x) / len(x) if len(x) else 0.0
-get_score = lambda niqe_avg, runtime_avg: math.sqrt(7 - niqe_avg) / runtime_avg * 200
+
+def get_score(niqe_avg:float, runtime_avg:float) -> float:
+  try: return math.sqrt(7 - niqe_avg) / runtime_avg * 200
+  except: return -1
+
+DATASETS = [
+  'test',     # ranklist A
+  'val',      # ranklist B
+]
 
 POSTPROCESSOR = [
   'SHARPEN',
@@ -65,18 +72,25 @@ def fix_model_size(model_size_str:str) -> Tuple[int, int]:
     e = int(model_size_str)
     return [e, e]
 
+def fix_input_output_paths(args) -> List[Path]:
+  # in/out paths
+  paths = [Path(fp) for fp in sorted(glob.glob(os.path.join(str(IN_PATH), args.dataset, '*')))]
+  if args.limit > 0: paths = paths[:args.limit]
+  if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
+  return paths
+
 
 def get_parser():
   parser = ArgumentParser()
   parser.add_argument('-K', '--backend', default='bmodel', choices=['bmodel', 'pytorch'])
-  parser.add_argument('-D', '--device',  type=int,  default=0,          help='GPU/TPU device id')
-  parser.add_argument('-M', '--model',   type=Path, default='r-esrgan', help='path to *.bmodel model ckpt, , or folder name under path models/')
+  parser.add_argument('--device',        type=int,  default=0,          help='TPU/GPU device id')
+  parser.add_argument('-M', '--model',   type=Path, default='r-esrgan', help='path to *.bmodel model ckpt, or folder name under path models/')
   parser.add_argument('--model_size',    type=str,                      help='model input size like 200 or 196,256')
-  parser.add_argument('--padding',       type=int,  default=16)
-  parser.add_argument('--batch_size',    type=int,  default=8)
-  parser.add_argument('-I', '--input',   type=Path, default=IN_PATH,    help='input image or folder')
-  parser.add_argument('-L', '--limit',   type=int,  default=-1,         help='limit run sample count')
-  parser.add_argument('--postprocess',   choices=POSTPROCESSOR)
+  parser.add_argument('--padding',       type=int,  default=0)
+  parser.add_argument('--batch_size',    type=int,  default=8,          help='only for pytorch')
+  parser.add_argument('-D', '--dataset', type=str,  default='val',      choices=DATASETS)
+  parser.add_argument('-L', '--limit',   type=int,  default=-1,         help='limit dataset run sample count')
+  parser.add_argument('-pp', '--postprocess', choices=POSTPROCESSOR)
   parser.add_argument('--save',          action='store_true',           help='save sr images')
   return parser
 
@@ -100,8 +114,8 @@ def process_args(args):
 
   args.model_size = fix_model_size(args.model_size)
 
-  args.log_dp = OUT_PATH / Path(args.model).stem
-  args.log_dp.mkdir(exist_ok=True)
+  args.log_dp: Path = OUT_PATH / args.dataset / Path(args.model).stem
+  args.log_dp.mkdir(parents=True, exist_ok=True)
   args.output = args.log_dp / 'test_sr'
   args.report = args.log_dp / 'test.json'
 
@@ -165,38 +179,34 @@ def process_images(args, model:Callable, paths:List[Path], niqe:List[float], run
 
 def run_eval(args, get_model:Callable, process_images:Callable):
   # in/out paths
-  if Path(args.input).is_file():
-    paths = [Path(args.input)]
-  else:
-    paths = [Path(fp) for fp in sorted(glob.glob(os.path.join(str(args.input), '*')))]
-  if args.limit > 0: paths = paths[:args.limit]
-  if args.save: Path(args.output).mkdir(parents=True, exist_ok=True)
+  paths = fix_input_output_paths(args)
 
   # setup model
   model = get_model(args)
 
   # workers & task
-  start_all = time()
   niqe:    List[float] = []
   runtime: List[float] = []
   result:  List[dict]  = []
+  start_all = time()
   process_images(args, model, paths, niqe, runtime, result)
   end_all = time()
   time_all = end_all - start_all
   runtime_avg = mean(runtime)
   niqe_avg = mean(niqe)
-  print('time_all:',    time_all)
+  print('time_all:', time_all)
   print('runtime_avg:', runtime_avg)
-  print('niqe_avg:',    niqe_avg)
-  print('>> score:',    get_score(niqe_avg, runtime_avg))
+  print('niqe_avg:', niqe_avg)
+  print('>> score:', get_score(niqe_avg, runtime_avg))
 
   # gather results
+  ranklist = 'A' if args.dataset == 'test' else 'B'
   metrics = {
-    'A': [{
+    ranklist: [{
       'model_size': os.path.getsize(args.model), 
       'time_all': time_all, 
-      'runtime_avg': format(mean(runtime), '.4f'),
-      'niqe_avg': format(mean(niqe), '.4f'), 
+      'runtime_avg': format(runtime_avg, '.4f'),
+      'niqe_avg': format(niqe_avg, '.4f'), 
       'images': result,
     }]
   }
