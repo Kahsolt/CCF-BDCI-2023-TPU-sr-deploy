@@ -25,7 +25,6 @@ MODEL_PATH = BASE_PATH / 'models'
 LIB_PATH = BASE_PATH / 'repo' / 'TPU-Coder-Cup' / 'CCF2023'                     # local (develop)
 if not LIB_PATH.exists(): LIB_PATH = BASE_PATH / 'TPU-Coder-Cup' / 'CCF2023'    # cloud server (deploy)
 IN_PATH  = BASE_PATH / 'data'
-if not IN_PATH.exists(): IN_PATH  = BASE_PATH
 TEST_IMG_FILE = IN_PATH / 'test' / '0001.png'
 NIQE_FILE = LIB_PATH / 'metrics' / 'niqe_pris_params.npz'
 OUT_PATH = BASE_PATH / 'out' ; OUT_PATH.mkdir( exist_ok=True)
