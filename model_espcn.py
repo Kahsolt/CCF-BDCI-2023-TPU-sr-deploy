@@ -7,6 +7,8 @@
 
 import sys
 import os
+from typing import Dict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -40,6 +42,40 @@ class ESPCN_ex(ESPCN):
       self.sub_pixel(self.feature_maps(x[:, 0:1, :, :])),
       self.sub_pixel(self.feature_maps(x[:, 1:2, :, :])),
       self.sub_pixel(self.feature_maps(x[:, 2:3, :, :])),
+    ], dim=1)
+
+class ESPCN_ex3(ESPCN_nc):
+
+  ''' directly apply ESPCN to each RGB channel, even if it is pretrained in Y channel via group-conv2d; no clip '''
+
+  def __init__(self, in_channels: int, out_channels: int, channels: int, upscale_factor: int):
+    super(ESPCN, self).__init__()
+
+    hidden_channels = channels // 2
+    out_channels = int(out_channels * (upscale_factor ** 2))
+
+    # Feature mapping
+    self.feature_maps = nn.Sequential(
+      nn.Conv2d(in_channels*3, channels*3, (5, 5), (1, 1), (2, 2), groups=3),
+      nn.Tanh(),
+      nn.Conv2d(channels*3, hidden_channels*3, (3, 3), (1, 1), (1, 1), groups=3),
+      nn.Tanh(),
+    )
+
+    # Sub-pixel convolution layer
+    self.sub_pixel = nn.Sequential(
+      nn.Conv2d(hidden_channels*3, out_channels*3, (3, 3), (1, 1), (1, 1), groups=3),
+      nn.PixelShuffle(upscale_factor),
+    )
+
+  def _forward_impl(self, x: Tensor) -> Tensor:
+    fmaps = self.feature_maps(x)    # [B=4, C=96, H=192, W=256]
+    x = self.sub_pixel[0](fmaps)    # [B=4, C=48, H=192, W=256]
+    pshuff = self.sub_pixel[1]
+    return torch.cat([
+      pshuff(x[:,  0:16, :, :]),
+      pshuff(x[:, 16:32, :, :]),
+      pshuff(x[:, 32:48, :, :]),
     ], dim=1)
 
 class ESPCN_cp(ESPCN):
@@ -108,17 +144,30 @@ def make_script_module(name:str):
 
   ckpt = torch.load(MODEL_CKPT_FILE, map_location='cpu')
   if isinstance(ckpt, dict):
-    state_dict = ckpt['state_dict']
-    # ESPCN only process the Y channel in YCbCr space
-    if name == 'espcn':
+    state_dict: Dict[str, Tensor] = ckpt['state_dict']
+    if name == 'espcn':       # ESPCN only process the Y channel in YCbCr space
       model = espcn_x4(in_channels=1, out_channels=1, channels=64)
       example = torch.zeros([BATCH_SIZE, 1, *MODEL_SIZE])
-    elif name == 'espcn_nc':
+    elif name == 'espcn_nc':  # ESPCN only process the Y channel in YCbCr space
       model = ESPCN_nc(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
       example = torch.zeros([BATCH_SIZE, 1, *MODEL_SIZE])
     elif name == 'espcn_ex':
       model = ESPCN_ex(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
       example = torch.zeros([BATCH_SIZE, 3, *MODEL_SIZE])
+    elif name == 'espcn_ex3':
+      model = ESPCN_ex3(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
+      example = torch.zeros([BATCH_SIZE, 3, *MODEL_SIZE])
+
+      if 'repeat weights':
+        new_state_dict = {}
+        for k, v in state_dict.items():
+          ndim = len(v.shape)
+          if ndim == 1:
+            new_state_dict[k] = torch.tile(v, dims=[3])
+          elif ndim == 4:
+            new_state_dict[k] = torch.tile(v, dims=[3, 1, 1, 1])
+        state_dict = new_state_dict   # replace
+
     elif name == 'espcn_cp':
       model = ESPCN_cp(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
       example = torch.zeros([BATCH_SIZE, 3, *MODEL_SIZE])
@@ -134,4 +183,7 @@ if __name__ == '__main__':
   make_script_module('espcn')
   make_script_module('espcn_nc')
   make_script_module('espcn_ex')
+  make_script_module('espcn_ex3')
   make_script_module('espcn_cp')
+
+  os.system('bash ./convert_espcn.sh')

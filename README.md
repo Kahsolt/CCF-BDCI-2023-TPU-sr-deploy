@@ -95,8 +95,7 @@ Team name: Absofastlutely
 
 #### compile the bmodel
 
-- run `python model_espcn.py`
-- run `bash convert_espcn.sh`, you will get the compiled `models/espcn*/espcn*.<dtyp>.bmodel`
+- run `python model_espcn.py`, you will get the compiled `models/espcn*/espcn*.<dtyp>.bmodel`
 
 
 ### deploy
