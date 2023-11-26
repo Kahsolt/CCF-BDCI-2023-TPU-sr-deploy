@@ -36,6 +36,14 @@ from fix import imgFusion, imgFusion2
 from metrics.niqe import niqe, calculate_niqe, to_y_channel
 from metrics.utils import bgr2ycbcr, to_y_channel
 
+
+DEBUG_TIME  = bool(os.environ.get('DEBUG_TIME',  False))
+DEBUG_SHAPE = bool(os.environ.get('DEBUG_SHAPE', False))
+DEBUG_IMAGE = bool(os.environ.get('DEBUG_IMAGE', False))
+
+BATCH_SIZE = 1
+MODEL_SIZE = (192, 256)      # the optimal tile_size
+
 Box = Tuple[slice, slice]
 
 mean = lambda x: sum(x) / len(x) if len(x) else 0.0
@@ -65,7 +73,7 @@ def np_to_pil(im:ndarray) -> PILImage:
 
 
 def fix_model_size(model_size_str:str) -> Tuple[int, int]:
-  if not model_size_str: return (192, 256)    # the optimal tile_size
+  if not model_size_str: return MODEL_SIZE
   if ',' in model_size_str:
     return [int(e) for e in model_size_str.split(',')]
   else:
@@ -87,7 +95,7 @@ def get_parser():
   parser.add_argument('-M', '--model',   type=Path, default='r-esrgan', help='path to *.bmodel model ckpt, or folder name under path models/')
   parser.add_argument('--model_size',    type=str,                      help='model input size like 200 or 196,256')
   parser.add_argument('--padding',       type=int,  default=0)
-  parser.add_argument('--batch_size',    type=int,  default=8,          help='only for pytorch')
+  parser.add_argument('--batch_size',    type=int,  default=4)
   parser.add_argument('-D', '--dataset', type=str,  default='val',      choices=DATASETS)
   parser.add_argument('-L', '--limit',   type=int,  default=-1,         help='limit dataset run sample count')
   parser.add_argument('-pp', '--postprocess', choices=POSTPROCESSOR)
@@ -141,7 +149,7 @@ class TiledSR:
     raise NotImplementedError
 
 
-def process_images(args, model:Callable, paths:List[Path], niqe:List[float], runtime:List[float], result:List[dict]):
+def process_images(args, model:TiledSR, paths:List[Path], niqe:List[float], runtime:List[float], result:List[dict]):
   total = len(paths)
   for idx, fp in enumerate(tqdm(paths)):
     # 加载图片
@@ -153,23 +161,30 @@ def process_images(args, model:Callable, paths:List[Path], niqe:List[float], run
     im_high: ndarray = model(im_low)
     end = time() - start
     runtime.append(end)
+    if DEBUG_TIME: print('ts_infer:', end)
 
     im_high = im_high.clip(0.0, 1.0)    # vrng 0~1
     img_high = None
 
     # 后处理
     if args.postprocess:
+      if DEBUG_TIME: ts_pp = time()
       img_high = img_high or np_to_pil(im_high)
       img_high = img_high.filter(getattr(ImageFilter, args.postprocess))
       im_high = pil_to_np(img_high)
+      if DEBUG_TIME: print('ts_pp:', time() - ts_pp)
 
     # 保存图片
     if args.save:
+      if DEBUG_TIME: ts_save = time()
       img_high = img_high or np_to_pil(im_high)
       img_high.save(Path(args.output) / fp.name)
+      if DEBUG_TIME: print('ts_save:', time() - ts_save)
 
     # 计算niqe
+    if DEBUG_TIME: ts_niqe = time()
     niqe_output = get_niqe(im_high)
+    if DEBUG_TIME: print('ts_niqe:', time() - ts_niqe)
     niqe.append(niqe_output)
 
     result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})

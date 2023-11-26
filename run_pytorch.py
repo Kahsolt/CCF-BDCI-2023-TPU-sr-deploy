@@ -4,12 +4,8 @@ from torch.nn import Module
 
 from run_utils import *
 
-device = 'cpu'    # cpu is faster than cuda :)
-device = 'cuda' if torch.cuda.is_available() else 'cpu'   # but some op does not run on cpu :(
+device = 'cuda' if torch.cuda.is_available() else 'cpu'   # cpu is faster, but not support some op :(
 print(f'>> device: {device}')
-
-DEBUG_SHAPE = bool(os.environ.get('DEBUG_SHAPE', False))
-DEBUG_IMAGE = bool(os.environ.get('DEBUG_IMAGE', False))
 
 
 class TiledSRPytorch(TiledSR):

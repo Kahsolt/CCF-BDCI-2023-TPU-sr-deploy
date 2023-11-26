@@ -10,7 +10,7 @@ Team name: Absofastlutely
 
 ### results
 
-ℹ Upscale `x4` on various-sized images from `testA.zip` on sophon's [bm1684x](https://www.sophon.ai/product/introduce/bm1684x.html) TPU
+#### Ranklist A (`testA.zip` / `test`)
 
 ⚪ FP16
 
@@ -46,6 +46,15 @@ Team name: Absofastlutely
 | espcn_nc | 16 | DETAIL | 0.6301 | 5.0394 |  444.4484 |  |
 | espcn_ex | 16 |        | 0.6184 | 5.8532 |  346.3551 |  |
 
+#### Ranklist B (`testB.zip` / `val`)
+
+⚪ FP16
+
+| model | padding | filter | time | niqe | score | comment |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| original |   |        |        | 4.2733 |           |  |
+| espcn_ex | 0 |  EDGE  | 0.1615 | 4.5679 | 1930.9247 |  |
+
 
 ### develop
 
@@ -80,15 +89,14 @@ Team name: Absofastlutely
     - `ls $TPUC_ROOT/python/test`
     - `ls $TPUC_ROOT/python/samples`
   - verify by running the official demos
-    - `cd test`
     - `bash env/convert_mobilenet_v2.sh` (sdk v1.4 demo)
     - `bash env/convert_resrgan.sh` (contest demo)
 - freeze up an image `docker commit -p -a kahsolt -m "add tpu-mlir v1.4" tpu-mlir kahsolt/tpuc_dev:latest`
 
-#### compile the target model as we submit
+#### compile the bmodel
 
-- run `python model_espcn.py` **out of the docker in Windows cmd** (if you natively use Linux, you need some modification on paths)
-- run `bash convert_espcn.sh` **in the docker**, you will get the compiled `models/espcn*/espcn*.<dtyp>.bmodel`
+- run `python model_espcn.py`
+- run `bash convert_espcn.sh`, you will get the compiled `models/espcn*/espcn*.<dtyp>.bmodel`
 
 
 ### deploy
@@ -107,7 +115,7 @@ Team name: Absofastlutely
   - upload bmodel `*.bmodel`
   - upload code `run_bmodel.py` and `run_utils.py`
   - run eval `python run_bmodel.py -M <name.bmodel>`
-  - find the results at `out/<name>//test.json`
+  - find the results at `out/<dataset>/<name>/test.json`
 
 
 #### references

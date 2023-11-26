@@ -27,7 +27,7 @@ if [ ! -d $MODEL_NAME ]; then
 fi
 cd $MODEL_NAME
 
-# TPU并不支持并行处理批
+# TPU批处理反而慢(?
 B=1
 # 确定输入图片尺寸
 H=192
@@ -35,10 +35,10 @@ W=256
 # 设备
 DEVICE=bm1684x
 # 文件路径
-MODEL_PATH=$MODEL_NAME.pt
-MLIR_NAME=$MODEL_NAME.mlir
-BMODEL_FP32_FILE=$MODEL_NAME.fp32.bmodel
-BMODEL_FP16_FILE=$MODEL_NAME.fp16.bmodel
+MODEL_PATH=${MODEL_NAME}_$B.pt
+MLIR_NAME=${MODEL_NAME}_$B.mlir
+BMODEL_FP32_FILE=${MODEL_NAME}_$B.fp32.bmodel
+BMODEL_FP16_FILE=${MODEL_NAME}_$B.fp16.bmodel
 
 # 将 torch.jit 模型转换为 mlir
 if [ ! -f $MLIR_NAME ]; then
@@ -50,13 +50,13 @@ if [ ! -f $MLIR_NAME ]; then
 fi
 
 # 将 mlir 转换成 fp32 的 bmodel
-if [ ! -f $BMODEL_FP32_FILE ]; then
-  model_deploy.py \
-    --mlir $MLIR_NAME \
-    --quantize F32 \
-    --chip $DEVICE \
-    --model $BMODEL_FP32_FILE
-fi
+#if [ ! -f $BMODEL_FP32_FILE ]; then
+#  model_deploy.py \
+#    --mlir $MLIR_NAME \
+#    --quantize F32 \
+#    --chip $DEVICE \
+#    --model $BMODEL_FP32_FILE
+#fi
 
 # 将 mlir 转换成 fp16 的 bmodel
 if [ ! -f $BMODEL_FP16_FILE ]; then

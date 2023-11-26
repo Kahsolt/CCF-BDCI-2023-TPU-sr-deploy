@@ -5,8 +5,6 @@ sail.set_dump_io_flag(False)
 
 from run_utils import *
 
-DEBUG_TIME = bool(os.environ.get('DEBUG_TIME', False))
-
 
 # ref: https://github.com/sophgo/TPU-Coder-Cup/blob/main/CCF2023/npuengine.py
 class EngineOV:
@@ -30,6 +28,12 @@ class EngineOV:
     self.input_name  = self.model.get_input_names(self.graph_name)
     self.output_name = self.model.get_output_names(self.graph_name)
 
+    input_name_0 = self.input_name[0]
+    self.input_shape = self.model.get_input_shape(self.graph_name, input_name_0)
+    self.input_dtype = self.model.get_input_dtype(self.graph_name, input_name_0)
+    print('>> input_shape:', self.input_shape)
+    print('>> input_dtype:', self.input_dtype)
+
   def __str__(self):
     return f'EngineOV: model_path={self.model_path}, device_id={self.device_id}'
 
@@ -40,15 +44,54 @@ class EngineOV:
     return [output[name] for name in self.output_name]
 
 
-class TiledSRBModelTile(TiledSR):
+class TiledSRBModel(TiledSR):
 
-  ''' simple non-overlaping tiling '''
-
-  def __init__(self, model_fp:Path, model_size:Tuple[int, int], device_id:int=0):
-    super().__init__(model_size, padding=0, bs=1)
+  def __init__(self, model_fp:Path, model_size:Tuple[int, int], padding:int=4, device_id:int=0):
+    super().__init__(model_size, padding)
 
     print(f'>> load model: {model_fp.stem}')
     self.model = EngineOV(str(model_fp), device_id)
+    self.bs = self.model.input_shape[0]
+
+  def forward_tiles(self, X:ndarray, boxes_low:List[Box], boxes_high:List[Box], P_ex:int=None, ret_cnt:bool=False) -> ndarray:
+    C, H_ex , W_ex = X.shape
+
+    if DEBUG_TIME: ts_tiles = time()
+    H_ex_tgt, W_ex_tgt = int(H_ex * self.upscale_rate), int(W_ex * self.upscale_rate)
+    canvas = np.zeros([C, H_ex_tgt, W_ex_tgt], dtype=X.dtype)
+    if ret_cnt:
+      count = np.zeros([H_ex_tgt, W_ex_tgt], dtype=np.int32)
+    while len(boxes_low):
+      batch_low,  boxes_low  = boxes_low [:self.bs], boxes_low [self.bs:]
+      batch_high, boxes_high = boxes_high[:self.bs], boxes_high[self.bs:]
+      # [B, C, H_tile=192, W_tile=256]
+      tiles_low = [X[:, slice_h, slice_w] for slice_h, slice_w in batch_low]
+      # batch count pad
+      while len(tiles_low) < self.bs:
+        tiles_low.append(np.zeros_like(tiles_low[-1]))
+      XT = np.stack(tiles_low, axis=0)
+      # [B, C, H_tile*F=764, W_tile*F=1024]
+      if DEBUG_TIME: ts_tile = time()
+      tiles_high: ndarray = self.model([XT])[0]
+      if DEBUG_TIME: print('ts_tile:', time() - ts_tile)
+      # trim batch count pad
+      tiles_high = tiles_high[:len(batch_low)]
+      # paste to canvas
+      for tile, (high_h, high_w) in zip(tiles_high, batch_high):
+        if ret_cnt:
+          count [high_h, high_w] += 1
+        if P_ex is None:
+          canvas[:, high_h, high_w] += tile
+        else:
+          canvas[:, high_h, high_w] += tile[:, P_ex:-P_ex, P_ex:-P_ex]
+    if DEBUG_TIME: print('ts_tiles:', time() - ts_tiles)
+
+    return (canvas, count) if ret_cnt else canvas
+
+
+class TiledSRBModelTile(TiledSRBModel):
+
+  ''' simple non-overlaping tiling '''
 
   def __call__(self, im:ndarray) -> ndarray:
     if DEBUG_TIME: ts_cvs = time()
@@ -63,15 +106,13 @@ class TiledSRBModelTile(TiledSR):
     # uncrop (zero padding)
     H_ex = num_rows * self.tile_h
     W_ex = num_cols * self.tile_w
-    im_ex = np.zeros([H_ex, W_ex, C], dtype=im.dtype)
-    # relocate top-left origin
-    init_y = (H_ex - H) // 2
-    init_x = (W_ex - W) // 2
-    # paste original image in the center
-    im_ex[init_y:init_y+H, init_x:init_x+W, :] = im
+    # pad to expanded canvas
+    d_H = H_ex - H ; d_H_2 = d_H // 2
+    d_W = W_ex - W ; d_W_2 = d_W // 2
+    im_ex = np.pad(im, ((d_H_2, d_H-d_H_2), (d_W_2, d_W-d_W_2), (0, 0)), mode='constant', constant_values=0.0)
 
-    # [B=1, C=3, H_ex, W_ex]
-    X = np.expand_dims(np.transpose(im_ex, (2, 0, 1)), axis=0)
+    # [C=3, H_ex, W_ex]
+    X = np.transpose(im_ex, (2, 0, 1))
     if DEBUG_TIME: print('ts_cvs:', time() - ts_cvs)
 
     # break up tiles
@@ -96,47 +137,26 @@ class TiledSRBModelTile(TiledSR):
     if DEBUG_TIME: print('ts_box:', time() - ts_box)
 
     # forward & sew up tiles
-    if DEBUG_TIME: ts_tiles = time()
-    H_ex_tgt, W_ex_tgt = int(H_ex * R), int(W_ex * R)
-    canvas = np.zeros([C, H_ex_tgt, W_ex_tgt], dtype=X.dtype)
-    for i in range(len(boxes_low)):
-      low_slices  = boxes_low [i]
-      high_slices = boxes_high[i]
-      # [B=1, C, H_tile=192, W_tile=256]
-      low_h, low_w = low_slices
-      XT = X[:, :, low_h, low_w].copy()     # NOTE: ref will go wrong on model call
-      # [C, H_tile*F=764, W_tile*F=1024]
-      if DEBUG_TIME: ts_tile = time()
-      YT: ndarray = self.model([XT])[0][0]
-      if DEBUG_TIME: print('ts_tile:', time() - ts_tile)
-      # paste to canvas
-      high_h, high_w = high_slices
-      canvas[:, high_h, high_w] = YT
-    if DEBUG_TIME: print('ts_tiles:', time() - ts_tiles)
+    canvas = self.forward_tiles(X, boxes_low, boxes_high)
 
     # crop
-    if DEBUG_TIME: ts_pp = time()
-    fin_y = int(init_y * R)
-    fin_x = int(init_x * R)
+    if DEBUG_TIME: ts_crop = time()
+    # relocate top-left origin
+    fin_y = int((H_ex - H) // 2 * R)
+    fin_x = int((W_ex - W) // 2 * R)
     out = canvas[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
     # to HWC
     out = np.transpose(out, [1, 2, 0])
     if DEBUG_TIME:
       ts_end = time()
-      print('ts pp:', ts_end - ts_pp)
-      print('ts all:', ts_end - ts_cvs)
+      print('ts crop:', ts_end - ts_crop)
+      print('ts __call__:', ts_end - ts_cvs)
     return out
 
 
-class TiledSRBModelOverlap(TiledSR):
+class TiledSRBModelOverlap(TiledSRBModel):
 
   ''' overlapped tiling with simple counting average '''
-
-  def __init__(self, model_fp:Path, model_size:Tuple[int, int], padding=16, device_id=0):
-    super().__init__(model_size, padding, bs=1)
-
-    print(f'>> load model: {model_fp.stem}')
-    self.model = EngineOV(str(model_fp), device_id)
 
   def __call__(self, im:ndarray) -> ndarray:
     if DEBUG_TIME: ts_cvs = time()
@@ -160,7 +180,7 @@ class TiledSRBModelOverlap(TiledSR):
     im_ex[init_y:init_y+H, init_x:init_x+W, :] = im
 
     # [B=1, C=3, H_ex, W_ex]
-    X = np.expand_dims(np.transpose(im_ex, (2, 0, 1)), axis=0)
+    X = np.transpose(im_ex, (2, 0, 1))
     if DEBUG_TIME: print('ts_cvs:', time() - ts_cvs)
 
     # break up tiles
@@ -185,28 +205,10 @@ class TiledSRBModelOverlap(TiledSR):
     if DEBUG_TIME: print('ts_box:', time() - ts_box)
 
     # forward & sew up tiles
-    if DEBUG_TIME: ts_tiles = time()
-    H_ex_tgt, W_ex_tgt = int(H_ex * R), int(W_ex * R)
-    canvas = np.zeros([C, H_ex_tgt, W_ex_tgt], dtype=X.dtype)
-    count  = np.zeros([   H_ex_tgt, W_ex_tgt], dtype=np.int32)
-    for i in range(len(boxes_low)):
-      low_slices  = boxes_low [i]
-      high_slices = boxes_high[i]
-      # [B=1, C, H_tile=192, W_tile=256]
-      low_h, low_w = low_slices
-      XT = X[:, :, low_h, low_w].copy()     # NOTE: ref will go wrong on model call
-      # [C, H_tile*F=764, W_tile*F=1024]
-      if DEBUG_TIME: ts_tile = time()
-      YT: ndarray = self.model([XT])[0][0]
-      if DEBUG_TIME: print('ts_tile:', time() - ts_tile)
-      # paste to canvas
-      high_h, high_w = high_slices
-      count [   high_h, high_w] += 1
-      canvas[:, high_h, high_w] += YT
-    if DEBUG_TIME: print('ts_tiles:', time() - ts_tiles)
+    canvas, count = self.forward_tiles(X, boxes_low, boxes_high, ret_cnt=True)
 
     # crop
-    if DEBUG_TIME: ts_pp = time()
+    if DEBUG_TIME: ts_crop = time()
     fin_y = int(init_y * R)
     fin_x = int(init_x * R)
     cvs_crop = canvas[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
@@ -217,21 +219,14 @@ class TiledSRBModelOverlap(TiledSR):
     out = np.transpose(out, [1, 2, 0])
     if DEBUG_TIME:
       ts_end = time()
-      print('ts pp:', ts_end - ts_pp)
-      print('ts all:', ts_end - ts_cvs)
+      print('ts crop:', ts_end - ts_crop)
+      print('ts __call__:', ts_end - ts_cvs)
     return out
 
 
-class TiledSRBModelCrop(TiledSR):
+class TiledSRBModelCrop(TiledSRBModel):
 
   ''' non-overlaping tiling with margin cropping '''
-
-  def __init__(self, model_fp:Path, model_size:Tuple[int, int], padding=1, device_id=0):
-    super().__init__(model_size, padding, bs=1)
-    assert padding > 0
-
-    print(f'>> load model: {model_fp.stem}')
-    self.model = EngineOV(str(model_fp), device_id)
 
   @property
   def tile_h(self): return self.model_size[0] - self.padding * 2
@@ -260,8 +255,8 @@ class TiledSRBModelCrop(TiledSR):
     # paste original image in the center
     im_ex[init_y:init_y+H, init_x:init_x+W, :] = im
 
-    # [B=1, C=3, H_ex, W_ex]
-    X = np.expand_dims(np.transpose(im_ex, (2, 0, 1)), axis=0)
+    # [C=3, H_ex, W_ex]
+    X = np.transpose(im_ex, (2, 0, 1))
     if DEBUG_TIME: print('ts_cvs:', time() - ts_cvs)
 
     # break up tiles
@@ -288,26 +283,10 @@ class TiledSRBModelCrop(TiledSR):
     if DEBUG_TIME: print('ts_box:', time() - ts_box)
 
     # forward & sew up tiles
-    if DEBUG_TIME: ts_tiles = time()
-    H_ex_tgt, W_ex_tgt = int(H_ex * R), int(W_ex * R)
-    canvas = np.zeros([C, H_ex_tgt, W_ex_tgt], dtype=X.dtype)
-    for i in range(len(boxes_low)):
-      low_slices  = boxes_low [i]
-      high_slices = boxes_high[i]
-      # [B=1, C, H_tile=192, W_tile=256]
-      low_h, low_w = low_slices
-      XT = X[:, :, low_h, low_w].copy()     # NOTE: ref will go wrong on model call
-      # [C, H_tile*F=764, W_tile*F=1024]
-      if DEBUG_TIME: ts_tile = time()
-      YT: ndarray = self.model([XT])[0][0]
-      if DEBUG_TIME: print('ts_tile:', time() - ts_tile)
-      # paste to canvas
-      high_h, high_w = high_slices
-      canvas[:, high_h, high_w] = YT[:, P_ex:-P_ex, P_ex:-P_ex]   # crop tile output
-    if DEBUG_TIME: print('ts_tiles:', time() - ts_tiles)
+    canvas = self.forward_tiles(X, boxes_low, boxes_high, P_ex=P_ex)
 
     # crop
-    if DEBUG_TIME: ts_pp = time()
+    if DEBUG_TIME: ts_crop = time()
     fin_y = int(init_y * R)
     fin_x = int(init_x * R)
     out = canvas[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
@@ -315,22 +294,22 @@ class TiledSRBModelCrop(TiledSR):
     out = np.transpose(out, [1, 2, 0])
     if DEBUG_TIME:
       ts_end = time()
-      print('ts pp:', ts_end - ts_pp)
-      print('ts all:', ts_end - ts_cvs)
+      print('ts crop:', ts_end - ts_crop)
+      print('ts __call__:', ts_end - ts_cvs)
     return out
 
 
 def get_model_tile(args):
-  return TiledSRBModelTile(args.model, args.model_size, device_id=args.device)
+  return TiledSRBModelTile(args.model, args.model_size, args.padding, device_id=args.device)
 
 
 def get_model_overlap(args):
-  return TiledSRBModelOverlap(args.model, args.model_size, padding=args.padding, device_id=args.device)
+  return TiledSRBModelOverlap(args.model, args.model_size, args.padding, device_id=args.device)
 
 
 def get_model_crop(args):
   # NOTE: negativate args.padding here
-  return TiledSRBModelCrop(args.model, args.model_size, padding=-args.padding, device_id=args.device)
+  return TiledSRBModelCrop(args.model, args.model_size, -args.padding, device_id=args.device)
 
 
 def get_model(args):
@@ -342,7 +321,6 @@ def get_model(args):
 if __name__ == '__main__':
   args = get_args()
   args.backend = 'bmodel'
-  args.batch_size = 1
   args = process_args(args)
 
   run_eval(args, get_model, process_images)

@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from run_utils import BASE_PATH, MODEL_PATH
+from run_utils import BASE_PATH, MODEL_PATH, MODEL_SIZE, BATCH_SIZE
 
 ESPCN_PATH = BASE_PATH / 'repo' / 'ESPCN-PyTorch'
 assert ESPCN_PATH.is_dir()
@@ -112,20 +112,20 @@ def make_script_module(name:str):
     # ESPCN only process the Y channel in YCbCr space
     if name == 'espcn':
       model = espcn_x4(in_channels=1, out_channels=1, channels=64)
-      example = torch.zeros([1, 1, 192, 256])
+      example = torch.zeros([BATCH_SIZE, 1, *MODEL_SIZE])
     elif name == 'espcn_nc':
       model = ESPCN_nc(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
-      example = torch.zeros([1, 1, 192, 256])
+      example = torch.zeros([BATCH_SIZE, 1, *MODEL_SIZE])
     elif name == 'espcn_ex':
       model = ESPCN_ex(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
-      example = torch.zeros([1, 3, 192, 256])
+      example = torch.zeros([BATCH_SIZE, 3, *MODEL_SIZE])
     elif name == 'espcn_cp':
       model = ESPCN_cp(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
-      example = torch.zeros([1, 3, 192, 256])
+      example = torch.zeros([BATCH_SIZE, 3, *MODEL_SIZE])
     model.load_state_dict(state_dict, strict=False)
     script_model = torch.jit.trace(model, example)
-    print(f'>> save to {MODEL_SUB_PATH / name}.pt')
-    torch.jit.save(script_model, f'{name}.pt')
+    print(f'>> save to {MODEL_SUB_PATH / name}_{BATCH_SIZE}.pt')
+    torch.jit.save(script_model, f'{name}_{BATCH_SIZE}.pt')
 
   os.chdir(cwd)
 

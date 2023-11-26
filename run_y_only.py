@@ -17,33 +17,44 @@ def process_images(args, model:Callable, paths:List[Path], niqe:List[float], run
     start = time()
     im_y, im_cb, im_cr = rgb_to_y_cb_cr(im_low)
     w_tgt, h_tgt = int(img.width * upscale_factor), int(img.height * upscale_factor)
+    ts_cbcr_up = time()
     im_cb_high = pil_to_np(np_to_pil(im_cb).resize((w_tgt, h_tgt), Resampling.BICUBIC))
     im_cr_high = pil_to_np(np_to_pil(im_cr).resize((w_tgt, h_tgt), Resampling.BICUBIC))
+    if DEBUG_TIME: print('ts_cbcr_up:', time() - ts_cbcr_up)
     # [H, W, C=1], float32
     im_y = np.expand_dims(im_y, axis=-1)
+    ts_infer = time()
     im_y_high: ndarray = model(im_y)   # NOTE: vrng might be not normalized
+    if DEBUG_TIME: print('ts_infer:', time() - ts_infer)
     im_y_high = im_y_high.squeeze(-1)
     im_high_ycbcr = np.stack([im_y_high, im_cb_high, im_cr_high], axis=-1)
     im_high = ycbcr_to_rgb(im_high_ycbcr)
     end = time() - start
     runtime.append(end)
+    if DEBUG_TIME: print('ts_split_infer_combine:', end)
 
     im_high = im_high.clip(0.0, 1.0)    # vrng 0~1
     img_high = None
 
     # 后处理
     if args.postprocess:
+      if DEBUG_TIME: ts_pp = time()
       img_high = img_high or np_to_pil(im_high)
       img_high = img_high.filter(getattr(ImageFilter, args.postprocess))
       im_high = pil_to_np(img_high)
+      if DEBUG_TIME: print('ts_pp:', time() - ts_pp)
 
     # 保存图片
     if args.save:
+      if DEBUG_TIME: ts_save = time()
       img_high = img_high or np_to_pil(im_high)
       img_high.save(Path(args.output) / fp.name)
+      if DEBUG_TIME: print('ts_save:', time() - ts_save)
 
     # 计算niqe
+    if DEBUG_TIME: ts_niqe = time()
     niqe_output = get_niqe_y(im_y_high.clip(0.0, 1.0))  # vrng 0~1
+    if DEBUG_TIME: print('ts_niqe:', time() - ts_niqe)
     niqe.append(niqe_output)
 
     result.append({'img_name': fp.stem, 'runtime': format(end, '.4f'), 'niqe': format(niqe_output, '.4f')})
