@@ -25,6 +25,9 @@ from model import ESPCN
 MODEL_CKPT_FILE = MODEL_PATH / 'espcn' / 'ESPCN_x4-T91-64bf5ee4.pth.tar'
 assert MODEL_CKPT_FILE.is_file(), f'please manully download the ckpt {MODEL_CKPT_FILE.name}, put at {MODEL_PATH}'
 
+B = BATCH_SIZE
+H, W = MODEL_SIZE
+
 
 class ESPCN_nc(ESPCN):
 
@@ -146,18 +149,17 @@ def make_script_module(name:str):
   if isinstance(ckpt, dict):
     state_dict: Dict[str, Tensor] = ckpt['state_dict']
     if name == 'espcn':       # ESPCN only process the Y channel in YCbCr space
+      C = 1
       model = espcn_x4(in_channels=1, out_channels=1, channels=64)
-      example = torch.zeros([BATCH_SIZE, 1, *MODEL_SIZE])
     elif name == 'espcn_nc':  # ESPCN only process the Y channel in YCbCr space
+      C = 1
       model = ESPCN_nc(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
-      example = torch.zeros([BATCH_SIZE, 1, *MODEL_SIZE])
     elif name == 'espcn_ex':
+      C = 3
       model = ESPCN_ex(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
-      example = torch.zeros([BATCH_SIZE, 3, *MODEL_SIZE])
     elif name == 'espcn_ex3':
+      C = 3
       model = ESPCN_ex3(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
-      example = torch.zeros([BATCH_SIZE, 3, *MODEL_SIZE])
-
       if 'repeat weights':
         new_state_dict = {}
         for k, v in state_dict.items():
@@ -167,14 +169,14 @@ def make_script_module(name:str):
           elif ndim == 4:
             new_state_dict[k] = torch.tile(v, dims=[3, 1, 1, 1])
         state_dict = new_state_dict   # replace
-
     elif name == 'espcn_cp':
+      C = 3
       model = ESPCN_cp(upscale_factor=4, in_channels=1, out_channels=1, channels=64)
-      example = torch.zeros([BATCH_SIZE, 3, *MODEL_SIZE])
     model.load_state_dict(state_dict, strict=False)
-    script_model = torch.jit.trace(model, example)
-    print(f'>> save to {MODEL_SUB_PATH / name}_{BATCH_SIZE}.pt')
-    torch.jit.save(script_model, f'{name}_{BATCH_SIZE}.pt')
+    script_model = torch.jit.trace(model, torch.zeros([B, C, H, W]))
+    fn = f'{name}_{B}x{C}x{H}x{W}.pt'
+    print(f'>> save to {MODEL_SUB_PATH / fn}')
+    torch.jit.save(script_model, fn)
 
   os.chdir(cwd)
 
@@ -186,4 +188,9 @@ if __name__ == '__main__':
   make_script_module('espcn_ex3')
   make_script_module('espcn_cp')
 
-  os.system('bash ./convert_espcn.sh')
+  os.chdir(BASE_PATH)
+  os.system(f'bash ./convert.sh espcn     {B} 1 {H} {W}')
+  os.system(f'bash ./convert.sh espcn_nc  {B} 1 {H} {W}')
+  os.system(f'bash ./convert.sh espcn_ex  {B} 3 {H} {W}')
+  os.system(f'bash ./convert.sh espcn_ex3 {B} 3 {H} {W}')
+  os.system(f'bash ./convert.sh espcn_cp  {B} 3 {H} {W}')

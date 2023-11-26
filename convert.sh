@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
 
 if [ -z $1 ]; then
-  echo "usage: $0 <model_subfolder_name> [channel_size]"
+  echo "usage: $0 <model_subfolder_name> [B] [C] [H] [W]"
+  echo "example:"
+  echo "  bash ./convert.sh ninasr_b0_x4"
+  echo "  bash ./convert.sh espcn_nc 1 1 192 256"
+  echo "  bash ./convert.sh espcn_ex 1 3 512 512"
   exit -1
 fi
 
 MODEL_NAME=$1
-
-if [ -z $2 ]; then
-  C=3     # RGB models
-else
-  C=$2    # y_only models
-fi
 
 # 工作目录 (本项目挂载根目录)
 pushd /workspace/code
@@ -27,18 +25,21 @@ if [ ! -d $MODEL_NAME ]; then
 fi
 cd $MODEL_NAME
 
-# TPU批处理反而慢(?
-B=1
+# TPU批处理无并行加速效果 :(
+B=$2 || 1
+# 通道数 (y_only?)
+C=$3 || 3
 # 确定输入图片尺寸
-H=192
-W=256
+H=$4 || 192
+W=$5 || 256
+# 唯一后缀
+SUFFIX=${B}x${C}x${H}x${W}
 # 设备
 DEVICE=bm1684x
 # 文件路径
-MODEL_PATH=${MODEL_NAME}_$B.pt
-MLIR_NAME=${MODEL_NAME}_$B.mlir
-BMODEL_FP32_FILE=${MODEL_NAME}_$B.fp32.bmodel
-BMODEL_FP16_FILE=${MODEL_NAME}_$B.fp16.bmodel
+MODEL_PATH=${MODEL_NAME}_${SUFFIX}.pt
+MLIR_NAME=${MODEL_NAME}_${SUFFIX}.mlir
+BMODEL_FP16_FILE=${MODEL_NAME}_${SUFFIX}.bmodel
 
 # 将 torch.jit 模型转换为 mlir
 if [ ! -f $MLIR_NAME ]; then
@@ -49,15 +50,6 @@ if [ ! -f $MLIR_NAME ]; then
     --mlir $MLIR_NAME
 fi
 
-# 将 mlir 转换成 fp32 的 bmodel
-#if [ ! -f $BMODEL_FP32_FILE ]; then
-#  model_deploy.py \
-#    --mlir $MLIR_NAME \
-#    --quantize F32 \
-#    --chip $DEVICE \
-#    --model $BMODEL_FP32_FILE
-#fi
-
 # 将 mlir 转换成 fp16 的 bmodel
 if [ ! -f $BMODEL_FP16_FILE ]; then
   model_deploy.py \
@@ -66,6 +58,3 @@ if [ ! -f $BMODEL_FP16_FILE ]; then
     --chip $DEVICE \
     --model $BMODEL_FP16_FILE
 fi
-
-# list up generated files
-ls -l
