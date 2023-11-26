@@ -12,7 +12,7 @@ class EngineOV:
   def __init__(self, model_path:str, device_id:int=0):
     if 'DEVICE_ID' in os.environ:
       device_id = int(os.environ['DEVICE_ID'])
-      print('>> device_id is in os.environ. and device_id = ', device_id)
+      print('>> device_id is in os.environ. use device_id = ', device_id)
     try:
       self.model = sail.Engine(model_path, device_id, sail.IOMode.SYSIO)
     except Exception as e:
@@ -25,23 +25,25 @@ class EngineOV:
     self.model_path  = model_path
     self.device_id   = device_id
     self.graph_name  = self.model.get_graph_names()[0]
-    self.input_name  = self.model.get_input_names(self.graph_name)
-    self.output_name = self.model.get_output_names(self.graph_name)
+    self.input_name  = self.model.get_input_names (self.graph_name)[0]
+    self.output_name = self.model.get_output_names(self.graph_name)[0]
 
-    input_name_0 = self.input_name[0]
-    self.input_shape = self.model.get_input_shape(self.graph_name, input_name_0)
-    self.input_dtype = self.model.get_input_dtype(self.graph_name, input_name_0)
+    self.input_shape = self.model.get_input_shape(self.graph_name, self.input_name)
+    self.input_dtype = self.model.get_input_dtype(self.graph_name, self.input_name)
     print('>> input_shape:', self.input_shape)
     print('>> input_dtype:', self.input_dtype)
+    self.output_shape = self.model.get_output_shape(self.graph_name, self.output_name)
+    self.output_dtype = self.model.get_output_dtype(self.graph_name, self.output_name)
+    print('>> output_shape:', self.output_shape)
+    print('>> output_dtype:', self.output_dtype)
 
   def __str__(self):
     return f'EngineOV: model_path={self.model_path}, device_id={self.device_id}'
 
-  def __call__(self, values:list):
-    assert isinstance(values, list), 'input should be a list'
-    input = { self.input_name[i]: values[i] for i in range(len(values)) }
+  def __call__(self, value:ndarray) -> ndarray:
+    input = { self.input_name: value }
     output = self.model.process(self.graph_name, input)
-    return [output[name] for name in self.output_name]
+    return output[self.output_name]
 
 
 class TiledSRBModel(TiledSR):
@@ -72,7 +74,7 @@ class TiledSRBModel(TiledSR):
       XT = np.stack(tiles_low, axis=0)
       # [B, C, H_tile*F=764, W_tile*F=1024]
       if DEBUG_TIME: ts_tile = time()
-      tiles_high: ndarray = self.model([XT])[0]
+      tiles_high: ndarray = self.model(XT)
       if DEBUG_TIME: print('ts_tile:', time() - ts_tile)
       # trim batch count pad
       tiles_high = tiles_high[:len(batch_low)]
