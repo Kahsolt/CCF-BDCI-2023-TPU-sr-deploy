@@ -55,6 +55,6 @@ for fp in tqdm(fps):
   print(stats[name])
 
 
-print(f'>> save to {fp}')  
+print(f'>> save to {fp_stats}')  
 with open(fp_stats, 'w', encoding='utf-8') as fh:
   json.dump(stats, fh, indent=2, ensure_ascii=False)

@@ -12,6 +12,7 @@ import json
 from time import time
 from pathlib import Path
 from argparse import ArgumentParser
+from pprint import pprint as pp
 from typing import *
 
 from tqdm import tqdm
@@ -114,9 +115,9 @@ def process_args(args):
   fp = Path(args.model)
   if not fp.is_file():
     dp: Path = MODEL_PATH / args.model
-    assert dp.is_dir(), 'should be a folder name under path models/'
+    assert dp.is_dir(), f'should be a file or a folder name under {MODEL_PATH!r}'
     fps = [fp for fp in dp.iterdir() if fp.suffix == suffix]
-    assert len(fps) == 1, f'folder contains mutiple *{suffix} files'
+    assert len(fps) == 1, f'folder contains mutiple *{suffix} files, must specify a file'
     args.model = fps[0]
 
   args.model_size = fix_model_size(args.model_size)
@@ -126,6 +127,8 @@ def process_args(args):
   args.output = args.log_dp / 'test_sr'
   args.report = args.log_dp / 'test.json'
 
+  print('cmd_args:')
+  pp(vars(args))
   return args
 
 
