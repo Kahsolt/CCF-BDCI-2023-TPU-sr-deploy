@@ -91,12 +91,9 @@ class TiledSRBModel(TiledSR):
     return (canvas, count) if ret_cnt else canvas
 
 
-class TiledSRBModelTile(TiledSRBModel):
-
-  ''' simple non-overlaping tiling '''
+class TiledSRBModelTileMixin:
 
   def __call__(self, im:ndarray) -> ndarray:
-    if DEBUG_TIME: ts_cvs = time()
     # R
     R = self.upscale_rate
     # [H, W, C=3]
@@ -111,14 +108,14 @@ class TiledSRBModelTile(TiledSRBModel):
     # pad to expanded canvas
     d_H = H_ex - H ; d_H_2 = d_H // 2
     d_W = W_ex - W ; d_W_2 = d_W // 2
+    ts_pad = time()
     im_ex = np.pad(im, ((d_H_2, d_H-d_H_2), (d_W_2, d_W-d_W_2), (0, 0)), mode='constant', constant_values=0.0)
+    if DEBUG_TIME: print('ts_pad:', time() - ts_pad)
 
     # [C=3, H_ex, W_ex]
     X = np.transpose(im_ex, (2, 0, 1))
-    if DEBUG_TIME: print('ts_cvs:', time() - ts_cvs)
 
     # break up tiles
-    if DEBUG_TIME: ts_box = time()
     boxes_low:  List[Box] = []
     boxes_high: List[Box] = []
     y = 0
@@ -135,25 +132,23 @@ class TiledSRBModelTile(TiledSRBModel):
         ))
         x += self.tile_w
       y += self.tile_h
-    #assert len(boxes_low) == num_rows * num_cols
-    if DEBUG_TIME: print('ts_box:', time() - ts_box)
 
     # forward & sew up tiles
     canvas = self.forward_tiles(X, boxes_low, boxes_high)
 
-    # crop
-    if DEBUG_TIME: ts_crop = time()
     # relocate top-left origin
     fin_y = int((H_ex - H) // 2 * R)
     fin_x = int((W_ex - W) // 2 * R)
+    # crop
     out = canvas[:, fin_y:fin_y+H_tgt, fin_x:fin_x+W_tgt]
     # to HWC
-    out = np.transpose(out, [1, 2, 0])
-    if DEBUG_TIME:
-      ts_end = time()
-      print('ts crop:', ts_end - ts_crop)
-      print('ts __call__:', ts_end - ts_cvs)
-    return out
+    return np.transpose(out, [1, 2, 0])
+
+class TiledSRBModelTile(TiledSRBModel, TiledSRBModelTileMixin):
+
+  ''' simple non-overlaping tiling '''
+
+  pass
 
 
 class TiledSRBModelOverlap(TiledSRBModel):

@@ -147,9 +147,6 @@ class TiledSR:
   @property
   def tile_w(self): return self.model_size[1]
 
-  def __call__(self, im:ndarray) -> ndarray:
-    raise NotImplementedError
-
 
 def process_images(args, model:TiledSR, paths:List[Path], niqe:List[float], runtime:List[float], result:List[dict]):
   total = len(paths)
