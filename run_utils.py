@@ -42,7 +42,7 @@ DEBUG_SHAPE = bool(os.environ.get('DEBUG_SHAPE', False))
 DEBUG_IMAGE = bool(os.environ.get('DEBUG_IMAGE', False))
 
 BATCH_SIZE = 1
-MODEL_SIZE = (192, 256)      # the optimal tile_size
+MODEL_SIZE = (128, 128)      # the optimal tile_size
 
 Box = Tuple[slice, slice]
 
