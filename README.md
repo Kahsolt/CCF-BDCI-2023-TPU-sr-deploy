@@ -5,14 +5,16 @@
 ----
 
 Contest page: [https://www.datafountain.cn/competitions/972](https://www.datafountain.cn/competitions/972)  
-Team name: Absofastlutely  
+Team name: **Absofastlutely**  
 
 
 ### results
 
-#### Ranklist A (`testA.zip` / `test`)
+⚠ We use dtype FP16, becuase F32 is **much slower** due to the hardware limit `TFLOPS = 32(INT8) / 16(FP16) / 2(FP32)`, and INT8 does not even work properly as we tried twice :(  
+⚠ The `time` is only about bmodel inference, excluding post-process `filter` but including RGB-YCbCr conversion for y_only models  
+⚠ The `tile_size` defaults to `(192,256)` if not specified
 
-⚪ FP16
+⚪ Ranklist A (`testA.zip` / `test`)
 
 | model | padding | filter | time | niqe | score | comment |
 | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
@@ -32,28 +34,20 @@ Team name: Absofastlutely
 | espcn_ex |  0 |  EDGE  | 0.1924 | 4.4465 | 1661.0886 |  |
 | espcn_ex |  0 | EDGE++ | 0.1910 | 4.4465 | 1673.4388 |  | 
 
-⚪ FP32
-
-⚠ F32 models is **much slower** than F16 ones, because `TFLOPS = 32(INT8) / 16(FP16) / 2(FP32)`
+⚪ Ranklist B (`testB.zip` / `val`)
 
 | model | padding | filter | time | niqe | score | comment |
 | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| original |    |        |        | 4.2733 |           |  |
-| fsrcnn   | 16 |        | 3.6149 | 4.9615 |   78.9931 | very slow |
-| ninasr   | 16 |        | 1.0166 | 5.5107 |  240.0883 | y_only |
-| espcn    | 16 |        | 0.7661 | 5.0328 |  366.1582 | y_only |
-| espcn    | 16 | DETAIL | 0.7628 | 4.7576 |  392.6231 | y_only |
-| espcn_nc | 16 | DETAIL | 0.6301 | 5.0394 |  444.4484 |  |
-| espcn_ex | 16 |        | 0.6184 | 5.8532 |  346.3551 |  |
+|   original   |   |      |        | 4.2733 |           |  |
+|   espcn_ex3  | 0 |      | 0.1852 | 5.5697 | 1291.6236 |  |
+|   espcn_ex3  | 0 | EDGE | 0.1850 | 4.5679 | 1686.2863 |  |
+|   espcn_ex   | 0 | EDGE | 0.1615 | 4.5679 | 1930.9247 |  |
+|   espcn_ex   | 0 | EDGE | 0.1140 | 4.5242 | 2761.0642 | thread=4, engine=multi |
+|   espcn_ex   | 0 | EDGE | 0.0983 | 4.3761 | 3296.2499 | thread=4, engine=multi, tile_size=128 |
+| **espcn_ee** | 0 |      | 0.1195 | 4.4613 | 2666.0168 | thread=4, engine=multi, tile_size=128, embed_pp=EdgeEnhance |
+| **espcn_um** | 0 |      | 0.1303 | 4.2143 | 2560.9604 | thread=4, engine=multi, tile_size=128, embed_pp=Sharpen |
 
-#### Ranklist B (`testB.zip` / `val`)
-
-⚪ FP16
-
-| model | padding | filter | time | niqe | score | comment |
-| :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| original |   |        |        | 4.2733 |           |  |
-| espcn_ex | 0 |  EDGE  | 0.1615 | 4.5679 | 1930.9247 |  |
+> The `espcn_ee` and `espcn_um` are the final pure TPU models without preprocess/postprocess on CPU :)
 
 
 ### develop
@@ -105,14 +99,14 @@ Team name: Absofastlutely
 - apply for a cloud server at [sophnet tpu-cloud](https://www.sophnet.com/)
   - open web terminal and `cd /tmp`, remeber this is your workdir
 - setup runtime
-  - upload script [env/setup_sophon.sh](setup_sophon.sh)
+  - upload script [env/setup_sophon.sh](setup_sophon.sh) to `/tmp`
   - run `source setup_sophon.sh`, which activaties the envvars and clones the material repo
   - list up TPU devices by `bm-smi`, get the driver version like `0.4.8`
   - install the python package `sophon` with right version (find it in the repo `TPU-Coder-Cup/CCF2023/sophon-{version}-py3-none-any.whl`)
 - deploy & eval the compiled bmodel
-  - upload testset `testA.zip` and unzip inplace
-  - upload bmodel `*.bmodel`
-  - upload code `run_bmodel.py` and `run_utils.py`
+  - upload testset `testA.zip` / `testB.zip` and unzip to `/tmp/data`
+  - upload bmodel `*.bmodel` to `/tmp/models`
+  - upload code `run_bmodel.py` and `run_utils.py` to `/tmp`
   - run eval `python run_bmodel.py -M <name.bmodel>`
   - find the results at `out/<dataset>/<name>/test.json`
 
@@ -130,7 +124,7 @@ Team name: Absofastlutely
 - sophnet tpu-cloud: [https://www.sophnet.com/](https://www.sophnet.com/)
 - contest demo repo: [https://github.com/sophgo/TPU-Coder-Cup/tree/main/CCF2023](https://github.com/sophgo/TPU-Coder-Cup/tree/main/CCF2023)
 - torchSR: [https://github.com/Coloquinte/torchSR](https://github.com/Coloquinte/torchSR)
- - NinaSR: [https://github.com/Coloquinte/torchSR/blob/main/doc/NinaSR.md](https://github.com/Coloquinte/torchSR/blob/main/doc/NinaSR.md)
+  - NinaSR: [https://github.com/Coloquinte/torchSR/blob/main/doc/NinaSR.md](https://github.com/Coloquinte/torchSR/blob/main/doc/NinaSR.md)
 - ESPCN-PyTorch: [https://github.com/Lornatang/ESPCN-PyTorch](https://github.com/Lornatang/ESPCN-PyTorch)
   - @Lornatang: [https://github.com/Lornatang](https://github.com/Lornatang)
   - model weight zoo: [https://pan.baidu.com/s/1yNs4rqIb004-NKEdKBJtYg?pwd=llot](https://pan.baidu.com/s/1yNs4rqIb004-NKEdKBJtYg?pwd=llot)
