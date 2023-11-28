@@ -9,8 +9,12 @@ from argparse import ArgumentParser
 import torch
 from torch.nn import Module
 
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-if __name__ == '__main__':
+
+@torch.inference_mode()
+def run():
   parser = ArgumentParser()
   parser.add_argument('fp', type=Path, help='path to *.pt model ckpt')
   args = parser.parse_args()
@@ -23,7 +27,7 @@ if __name__ == '__main__':
   model = model.eval()
   model_str = str(model)
   print(model_str)
-  param_cnt = sum([p.numel() for p in model.parameters() if p.requires_grad])
+  param_cnt = sum([p.numel() for p in model.parameters()])
   dtype = list(model.parameters())[0].dtype
   print(f'param_cnt: {param_cnt} ({param_cnt/10**6:.3f} M) in dtype {dtype}')
 
@@ -38,3 +42,7 @@ if __name__ == '__main__':
   X = torch.rand([1, 3, 224, 224], dtype=dtype)
 
   interact(local=globals())
+
+
+if __name__ == '__main__':
+  run()

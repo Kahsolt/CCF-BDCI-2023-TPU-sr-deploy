@@ -41,18 +41,20 @@ Team name: **Absofastlutely**
 
 | model | padding | filter | time | niqe | score | comment |
 | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-|   original   |   |      |        | 4.2733 |           |  |
-|   espcn_ex3  | 0 |      | 0.1852 | 5.5697 | 1291.6236 |  |
-|   espcn_ex3  | 0 | EDGE | 0.1850 | 4.5679 | 1686.2863 |  |
-|   espcn_ex   | 0 | EDGE | 0.1615 | 4.5679 | 1930.9247 |  |
-|   espcn_ex   | 0 | EDGE | 0.1140 | 4.5242 | 2761.0642 | thread=4, engine=multi |
-|   espcn_ex   | 0 | EDGE | 0.0983 | 4.3761 | 3296.2499 | thread=4, engine=multi, tile_size=128 |
-| **espcn_ee** | 0 |      | 0.1195 | 4.4613 | 2666.0168 | thread=4, engine=multi, tile_size=128, embed_pp=EdgeEnhance |
-| **espcn_ee** | 0 |      | 0.1161 | 4.4613 | 2745.5968 | run again ↑↑ |
-| **espcn_um** | 0 |      | 0.1303 | 4.2143 | 2560.9604 | thread=4, engine=multi, tile_size=128, embed_pp=Sharpen |
-| **espcn_um** | 0 |      | 0.1164 | 4.2143 | 2867.1234 | run again ↑↑ |
+|       original      |   |      |        | 4.2733 |           |  |
+|       espcn_ex3     | 0 |      | 0.1852 | 5.5697 | 1291.6236 |  |
+|       espcn_ex3     | 0 | EDGE | 0.1850 | 4.5679 | 1686.2863 |  |
+|       espcn_ex      | 0 | EDGE | 0.1615 | 4.5679 | 1930.9247 |  |
+|       espcn_ex      | 0 | EDGE | 0.1140 | 4.5242 | 2761.0642 | thread=4, engine=multi |
+|       espcn_ex      | 0 |      | 0.1007 | 5.4616 | 2464.4895 | thread=4, engine=multi, tile_size=128 |
+|       espcn_ex      | 0 | EDGE | 0.0983 | 4.3761 | 3296.2499 | thread=4, engine=multi, tile_size=128 |
+|     **espcn_ee**    | 0 |      | 0.1195 | 4.4613 | 2666.0168 | thread=4, engine=multi, tile_size=128, embed_pp=EdgeEnhance |
+|     **espcn_ee**    | 0 |      | 0.1161 | 4.4613 | 2745.5968 | run again ↑↑ |
+|     **espcn_um**    | 0 |      | 0.1303 | 4.2143 | 2560.9604 | thread=4, engine=multi, tile_size=128, embed_pp=Sharpen |
+|     **espcn_um**    | 0 |      | 0.1164 | 4.2143 | 2867.1234 | run again ↑↑ |
+| **espcn_um_approx** | 0 | | 0.1406 | 4.4175 | 2285.9834 | thread=4, engine=multi, tile_size=128, embed_pp=Sharpen, act=clip |
 
-> The `espcn_ee` and `espcn_um` are the final pure TPU models without preprocess/postprocess on CPU :)
+> The `espcn_ee`, `espcn_um` and `espcn_um_approx` are the final pure TPU models without preprocess/postprocess on CPU :)
 
 
 ### develop
