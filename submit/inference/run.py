@@ -214,7 +214,7 @@ def run(args):
     img_high.save(fp_save)
 
     img = Image.open(fp_save).convert('RGB')
-    im_high = pil_to_np(img)[:, :, ::-1]    # RGB2BGR
+    im_high = np.asarray(img, dtype=np.uint8)[:, :, ::-1]    # RGB2BGR
 
     niqe_output = calculate_niqe(im_high, 0, input_order='HWC', convert_to='y')
     niqe.append(round(niqe_output, 4))
