@@ -6,6 +6,7 @@
 
 Contest page: [https://www.datafountain.cn/competitions/972](https://www.datafountain.cn/competitions/972)  
 Team name: **Absofastlutely**  
+Final score (reproduced): **3317**  
 
 
 ### results
