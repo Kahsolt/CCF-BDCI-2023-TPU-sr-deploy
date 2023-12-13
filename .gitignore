@@ -24,3 +24,7 @@ repo/*
 lib/sophon.zip
 lib/sophon/*
 !lib/sophon/sail.py
+
+# doc
+doc/*
+!doc/基于TPU平台实现超分辨率重建模型部署-Absofastlutely-答辩PPT.pdf
